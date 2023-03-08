@@ -31,6 +31,11 @@ cy::Matrix4f modelMatrix = cy::Matrix4f::Identity();
 //Containers for mesh & program
 cy::TriMesh mesh;
 cy::GLSLProgram program;
+cy::GLSLProgram programC;
+
+//index for skybox data
+GLuint vao_skybox;
+GLuint vbo_skybox;
 
 //Parameters for mouse control
 int holdCount = 0;
@@ -136,6 +141,19 @@ void UpdateCam(){
     program.SetUniformMatrix3("mvN",mvN.cell);
     program.SetUniformMatrix4("mvp",mvp.cell);
 
+    //Update SkyBox
+    cy::Matrix4f vp = projMatrix * viewMatrix;
+    cy::Matrix4f ivp = vp.GetInverse();
+    cyVec3f skyboxVertices[3];
+    skyboxVertices[0] = (ivp*cyVec3f(-1,-1,0.999)).XYZ()*1000;
+    skyboxVertices[1] = (ivp*cyVec3f(-1,3,0.999)).XYZ()*1000;
+    skyboxVertices[2] = (ivp*cyVec3f(3,-1,0.999)).XYZ()*1000;
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_skybox);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(cyVec3f)*3, skyboxVertices);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    programC.SetUniformMatrix4("vp",vp.cell);
 }
 
 void UpdateLight(){
@@ -160,13 +178,10 @@ void CheckCenter(){
 void CompileShader(){
     //Create Shader Programs
     program.BuildFiles("../shaders/shader.vert","../shaders/shader.frag");
-
+    programC.BuildFiles("../shaders/skybox.vert","../shaders/skybox.frag");
     //Set MVP uniform
     UpdateCam();
     UpdateLight();
-
-    //Bind Program
-    program.Bind();
 }
 
 #pragma region InputCallbacks
@@ -215,6 +230,7 @@ void cb_MouseDistance(GLFWwindow* window, double posX, double posY){
 
     distance -= distance_Diff;
     if(distance <= 1) distance = 1;
+    if(distance >= 149) distance = 149;
     UpdateCam();
 
 }
@@ -308,7 +324,7 @@ int main(int argc, const char * argv[]) {
     glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT,GL_TRUE);
 
     //Create a GLFW window
-    GLFWwindow* pWindow = glfwCreateWindow(1600, 1000, "Project 3 - Shading", nullptr, nullptr);
+    GLFWwindow* pWindow = glfwCreateWindow(1600, 1000, "Project 6 - Environment Mapping", nullptr, nullptr);
     if(!pWindow) {
         glfwTerminate();
         exit(EXIT_FAILURE);
@@ -348,10 +364,41 @@ int main(int argc, const char * argv[]) {
     //Calculate mesh information
     mesh.ComputeBoundingBox();
 
-    std::cout<< "Num of Faces           : " << mesh.NF() << std::endl;
-    std::cout<< "Num of Materials       : " << mesh.NM() << std::endl;
-
 #pragma endregion LoadFlies
+
+#pragma region LoadCubeMap
+    //Assign & Bind cube map texId
+    GLuint cubeMapTexId;
+    glGenTextures(1,&cubeMapTexId);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexId);
+
+    //Load Files
+    unsigned cubeMapWidth = 2048, cubeMapHeight = 2048;
+    std::vector<unsigned char> cubeMapPOSX, cubeMapNEGX, cubeMapPOSY, cubeMapNEGY, cubeMapPOSZ, cubeMapNEGZ;
+    lodepng::decode(cubeMapPOSX, cubeMapWidth, cubeMapHeight, "../cubeMaps/cubemap_posx.png");
+    lodepng::decode(cubeMapNEGX, cubeMapWidth, cubeMapHeight, "../cubeMaps/cubemap_negx.png");
+    lodepng::decode(cubeMapPOSY, cubeMapWidth, cubeMapHeight, "../cubeMaps/cubemap_posy.png");
+    lodepng::decode(cubeMapNEGY, cubeMapWidth, cubeMapHeight, "../cubeMaps/cubemap_negy.png");
+    lodepng::decode(cubeMapPOSZ, cubeMapWidth, cubeMapHeight, "../cubeMaps/cubemap_posz.png");
+    lodepng::decode(cubeMapNEGZ, cubeMapWidth, cubeMapHeight, "../cubeMaps/cubemap_negz.png");
+
+    //Write data to cube map buffer
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X,0,GL_RGBA,cubeMapWidth,cubeMapHeight,0,GL_RGBA,GL_UNSIGNED_BYTE,cubeMapPOSX.data());
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_NEGATIVE_X,0,GL_RGBA,cubeMapWidth,cubeMapHeight,0,GL_RGBA,GL_UNSIGNED_BYTE,cubeMapNEGX.data());
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_Y,0,GL_RGBA,cubeMapWidth,cubeMapHeight,0,GL_RGBA,GL_UNSIGNED_BYTE,cubeMapPOSY.data());
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_NEGATIVE_Y,0,GL_RGBA,cubeMapWidth,cubeMapHeight,0,GL_RGBA,GL_UNSIGNED_BYTE,cubeMapNEGY.data());
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_Z,0,GL_RGBA,cubeMapWidth,cubeMapHeight,0,GL_RGBA,GL_UNSIGNED_BYTE,cubeMapPOSZ.data());
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_NEGATIVE_Z,0,GL_RGBA,cubeMapWidth,cubeMapHeight,0,GL_RGBA,GL_UNSIGNED_BYTE,cubeMapNEGZ.data());
+
+    //Specify Cube Map filters
+    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER,GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+    glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+
+#pragma endregion LoadCubeMap
 
 #pragma region VertexData
 
@@ -413,6 +460,9 @@ int main(int argc, const char * argv[]) {
 
     //Compile The Shader Program for the first time
     CompileShader();
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexId);
+    programC.SetUniform("skybox",0);
 
 #pragma endregion Shader
 
@@ -452,14 +502,37 @@ int main(int argc, const char * argv[]) {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int) * indexBufferData.size(), indexBufferData.data(), GL_STATIC_DRAW);
 
+    glBindVertexArray(0);
+
 #pragma endregion VertexBuffer
+
+#pragma region SkyBox
+    //vao for skybox
+    glGenVertexArrays(1, &vao_skybox);
+    glBindVertexArray(vao_skybox);
+
+    //vbo for skybox
+    glGenBuffers(1, &vbo_skybox);
+
+    GLuint pos_skybox = programC.AttribLocation("iPos");
+
+    //Link Buffer Data to vbo_skybox
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_skybox);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(cyVec3f)*3, nullptr, GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(pos_skybox, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(pos_skybox);
+    glBindBuffer(GL_ARRAY_BUFFER,0);
+
+    glBindVertexArray(0);
+
+#pragma endregion SkyBox
 
 #pragma region GLFWLifeCycle
     //Bind GLFW Callbacks
     glfwSetKeyCallback(pWindow,cb_Key);
     glfwSetMouseButtonCallback(pWindow,cb_MouseButton);
 
-    glEnable(GL_CULL_FACE);
+    //glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
 
     //GLFW main loop
@@ -469,7 +542,18 @@ int main(int argc, const char * argv[]) {
         }
         glfwPollEvents();
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+
+        program.Bind();
+        glBindVertexArray(vao);
         glDrawElements(GL_TRIANGLES, indexBufferData.size(), GL_UNSIGNED_INT, nullptr);
+
+        glDepthMask(GL_FALSE);
+        programC.Bind();
+        glBindVertexArray(vao_skybox);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexId);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glDepthMask(GL_TRUE);
 
         //Swap Buffers to render
         glfwSwapBuffers(pWindow);
