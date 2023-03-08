@@ -2,8 +2,6 @@
 
 ## ScreenShot
 ![ScreenShot](assets/Project5.jpg)
-There is also a video attached in the submission showing the implementation.
-
 ## What you implemented
 1. Created a Render buffer with the cy code base.
 2. Render the result of the original program to the buffered texture.
