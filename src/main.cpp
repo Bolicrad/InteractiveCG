@@ -8,10 +8,6 @@
 #include "cyCodeBase/cyMatrix.h"
 #include "loadpng/lodepng.h"
 
-//Window Width and Height
-int width_S = 1600;
-int height_S = 1000;
-
 //Parameters for Camera Control
 double distance = 100;
 double phi = M_PI;
@@ -22,33 +18,19 @@ double phi_L = 0;
 double theta_L = M_PI;
 cyVec3f lightDir = cyVec3f(0,-1,0);
 
-//Parameters for Square Camera Control
-double distance_S = 5;
-double phi_S = M_PI;
-double theta_S = 0.5 * M_PI;
-
 //Parameters of Camera
 cyVec3f camPos = cyVec3f(0,-distance,0);
 cyVec3f camTarget = cyVec3f(0,0,-1);
 cyVec3f camUp = cyVec3f (0,1,0);
-
-//Parameters of Square Camera
-cyVec3f camPos_S = cyVec3f(0, 0, distance_S);
-cyVec3f camTarget_S = cyVec3f (0,0,-1);
 
 //MVP Matrices
 cy::Matrix4f projMatrix = cy::Matrix4f::Perspective(0.25 * M_PI,1.6f,0.1f,1000.0f);
 cy::Matrix4f viewMatrix = cy::Matrix4f::View(camPos,camTarget,camUp);
 cy::Matrix4f modelMatrix = cy::Matrix4f::Identity();
 
-//MVP Matrices for Square
-cy::Matrix4f viewMatrix_S = cy::Matrix4f::View(camPos_S, camTarget_S, camUp);
-cy::Matrix4f modelMatrix_S = cyMatrix4f::Identity();
-
 //Containers for mesh & program
 cy::TriMesh mesh;
 cy::GLSLProgram program;
-cy::GLSLProgram program_S;
 
 //Parameters for mouse control
 int holdCount = 0;
@@ -56,7 +38,6 @@ bool firstMov = true;
 double lastX;
 double lastY;
 bool ctrlPressed = false;
-bool altPressed = false;
 
 // Check and translate the model to the Center
 bool centered = false;
@@ -157,14 +138,6 @@ void UpdateCam(){
 
 }
 
-void UpdateSquare(){
-    camTarget_S = CalculatePos(theta_S,phi_S);
-    camPos_S = -distance_S * camTarget_S;
-    viewMatrix_S = cyMatrix4f::View(camPos_S,camTarget_S,camUp);
-    cyMatrix4f mvp = projMatrix * viewMatrix_S * modelMatrix_S;
-    program_S.SetUniformMatrix4("mvp", mvp.cell);
-}
-
 void UpdateLight(){
     lightDir = (CalculatePos(theta_L,phi_L)).XYZ().GetNormalized();
     program.SetUniform("lightDir",lightDir.x,lightDir.y,lightDir.z);
@@ -181,26 +154,19 @@ void CheckCenter(){
 
         //Update Camera
         UpdateCam();
-        UpdateSquare();
     }
 }
 
 void CompileShader(){
     //Create Shader Programs
     program.BuildFiles("../shaders/shader.vert","../shaders/shader.frag");
-    program_S.BuildFiles("../shaders/square.vert","../shaders/square.frag");
-
-    //Set Up Aspect Ratio
-    GLfloat aspectRatio = (float)width_S/(float)height_S;
-    program_S.SetUniform("aspectRatio",aspectRatio);
 
     //Set MVP uniform
     UpdateCam();
     UpdateLight();
-    UpdateSquare();
 
-
-
+    //Bind Program
+    program.Bind();
 }
 
 #pragma region InputCallbacks
@@ -222,13 +188,6 @@ void cb_MouseAngles(GLFWwindow* window, double posX, double posY){
 
     lastX = posX;
     lastY = posY;
-
-    if(altPressed){
-        phi_S += offsetX / 180.0f * M_PI;
-        theta_S -= offsetY / 180.f * M_PI;
-        UpdateSquare();
-        return;
-    }
 
     if(ctrlPressed){
         phi_L += offsetX / 180.0f * M_PI;
@@ -253,13 +212,6 @@ void cb_MouseDistance(GLFWwindow* window, double posX, double posY){
     lastY = posY;
 
     float distance_Diff = offsetY;
-
-    if(altPressed){
-        distance_S -= distance_Diff;
-        if(distance_S <= 1) distance_S = 1;
-        UpdateSquare();
-        return;
-    }
 
     distance -= distance_Diff;
     if(distance <= 1) distance = 1;
@@ -316,10 +268,6 @@ void cb_MouseButton(GLFWwindow* window, int button, int action, int mods){
         std::cout << "Dir:      (" << lightDir.x << ", " << lightDir.y << ", " << lightDir.z << ")" << std::endl;
         std::cout << "Theta:    " << theta_L/M_PI << " * PI" << std::endl;
         std::cout << "Phi:      " << phi_L/M_PI << " * PI" << std::endl;
-        std::cout << "Current Square Status:" << std::endl;
-        std::cout << "Distance: " << distance_S << std::endl;
-        std::cout << "Theta:    " << theta_S/M_PI << " * PI" << std::endl;
-        std::cout << "Phi:      " << phi_S/M_PI << " * PI" << std::endl;
     }
 }
 
@@ -337,9 +285,6 @@ void cb_Key(GLFWwindow* window, int key, int scancode, int action, int mods){
             break;
         case GLFW_KEY_LEFT_CONTROL:
             ctrlPressed = action == GLFW_PRESS;
-            break;
-        case GLFW_KEY_LEFT_ALT:
-            altPressed = action == GLFW_PRESS;
             break;
     }
 }
@@ -363,14 +308,14 @@ int main(int argc, const char * argv[]) {
     glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT,GL_TRUE);
 
     //Create a GLFW window
-    GLFWwindow* pWindow = glfwCreateWindow(width_S, height_S, "Project 5 - Render Buffers", nullptr, nullptr);
+    GLFWwindow* pWindow = glfwCreateWindow(1600, 1000, "Project 4 - Textures", nullptr, nullptr);
     if(!pWindow) {
         glfwTerminate();
         exit(EXIT_FAILURE);
     }
 
-    glfwSetWindowMonitor(pWindow,glfwGetPrimaryMonitor(),0,0,width_S,height_S,60);
-    glfwSetWindowMonitor(pWindow, nullptr,160,0,width_S,height_S,60);
+    glfwSetWindowMonitor(pWindow,glfwGetPrimaryMonitor(),0,0,1600,1000,60);
+    glfwSetWindowMonitor(pWindow, nullptr,160,0,1600,1000,60);
 
     //Set Context to Current window
     glfwMakeContextCurrent(pWindow);
@@ -540,7 +485,6 @@ int main(int argc, const char * argv[]) {
     //Send Texture Data to GPU
     program.SetUniform("tex",0);
     program.SetUniform("texS", 1);
-    program_S.SetUniform("tex",2);
 
 #pragma endregion Shader
 
@@ -588,52 +532,7 @@ int main(int argc, const char * argv[]) {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int) * indexBufferData.size(), indexBufferData.data(), GL_STATIC_DRAW);
 
-    glBindVertexArray(0);
-
 #pragma endregion VertexBuffer
-
-#pragma region Square
-    //vao
-    GLuint vao_square;
-    glGenVertexArrays(1, &vao_square);
-    glBindVertexArray(vao_square);
-
-    //vertex data
-    static const GLfloat squareVertexPos[] = {
-            -1.0f, -1.0f, 0.0f,
-            1.0f, -1.0f, 0.0f,
-            -1.0f,  1.0f, 0.0f,
-            -1.0f,  1.0f, 0.0f,
-            1.0f, -1.0f, 0.0f,
-            1.0f,  1.0f, 0.0f,
-    };
-
-    GLuint pos_square = program_S.AttribLocation("iPos");
-
-    //vbo
-    GLuint vbo_square;
-    glGenBuffers(1, &vbo_square);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_square);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(squareVertexPos), squareVertexPos, GL_STATIC_DRAW);
-    glVertexAttribPointer(pos_square, 3, GL_FLOAT, GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(pos_square);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-
-    glBindVertexArray(0);
-
-#pragma endregion Square
-
-#pragma region RenderToTexture
-
-    int width_R = 1024;
-    int height_R = 1024;
-
-    cyGLRenderTexture2D renderBuffer;
-    renderBuffer.Initialize(true,3, width_R, height_R);
-    renderBuffer.SetTextureFilteringMode(GL_LINEAR,GL_LINEAR_MIPMAP_LINEAR);
-
-#pragma endregion RenderToTexture
 
 #pragma region GLFWLifeCycle
     //Bind GLFW Callbacks
@@ -649,13 +548,6 @@ int main(int argc, const char * argv[]) {
             CheckCenter();
         }
         glfwPollEvents();
-        //SetClearColor();
-
-        //Set frame buffer target and render
-        renderBuffer.Bind();
-        program.Bind();
-        glBindVertexArray(vao);
-        glClearColor(0.1,0.1,0.1,1);
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D,texID[0]);
@@ -663,25 +555,9 @@ int main(int argc, const char * argv[]) {
         glBindTexture(GL_TEXTURE_2D,texID[1]);
         glDrawElements(GL_TRIANGLES, indexBufferData.size(), GL_UNSIGNED_INT, nullptr);
 
-        //Set frame buffer target to back buffer
-        renderBuffer.Unbind();
-        renderBuffer.BuildTextureMipmaps();
-
-        //Draw the Square
-        program_S.Bind();
-        glBindVertexArray(vao_square);
-        glClearColor(0,0,0,1);
-        glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, renderBuffer.GetTextureID());
-        glDrawArrays(GL_TRIANGLES,0,6);
-
         //Swap Buffers to render
         glfwSwapBuffers(pWindow);
     }
-
-    //Delete Buffers
-
 
     //Terminate and Exit
     glfwTerminate();
