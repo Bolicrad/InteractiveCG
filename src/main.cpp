@@ -1,5 +1,5 @@
 #define CY_NO_IMMINTRIN_H
-#define VNAME(value) (#value)
+#define gluErrorString(value) (#value)
 #include <iostream>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
