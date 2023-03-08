@@ -115,7 +115,7 @@ link_libraries(${OPENGL} ${GLFW_LINK})
 
 add_executable(Your-Executable-Name src/glad.c src/main.cpp)
 target_include_directories(Your-Executable-Name PUBLIC /opt/homebrew/include)
-target_include_directories(Your-Executable-Name PRIVATE ${PROJECT_SOURCE_DIR}/includes)
+target_include_directories(Your-Executable-Name PRIVATE ${PROJECT_SOURCE_DIR}/include)
 
 if (APPLE)
     target_link_libraries(Your-Executable-Name "-framework OpenGL")
