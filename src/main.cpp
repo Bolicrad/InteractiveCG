@@ -13,11 +13,6 @@ double distance = 100;
 double phi = M_PI;
 double theta = 0;
 
-//Parameters for Light Control
-double phi_L = 0;
-double theta_L = M_PI;
-cyVec3f lightDir = cyVec3f(0,-1,0);
-
 //Parameters of Camera
 cyVec3f camPos = cyVec3f(0,-distance,0);
 cyVec3f camTarget = cyVec3f(0,0,-1);
@@ -37,7 +32,6 @@ int holdCount = 0;
 bool firstMov = true;
 double lastX;
 double lastY;
-bool ctrlPressed = false;
 
 // Check and translate the model to the Center
 bool centered = false;
@@ -122,25 +116,14 @@ cyVec3f CalculatePos(double &iTheta, double &iPhi){
 }
 
 void UpdateCam(){
-
     camTarget = CalculatePos(theta,phi);
     camPos = - distance * camTarget;
 
     viewMatrix = cy::Matrix4f::View(camPos,camTarget,camUp);
 
-    cy::Matrix4f mv = viewMatrix * modelMatrix;
-    cy::Matrix3f mvN = mv.GetInverse().GetTranspose().GetSubMatrix3();
     cy::Matrix4f mvp = projMatrix * viewMatrix * modelMatrix;
 
-    program.SetUniformMatrix4("mv",mv.cell);
-    program.SetUniformMatrix3("mvN",mvN.cell);
     program.SetUniformMatrix4("mvp",mvp.cell);
-
-}
-
-void UpdateLight(){
-    lightDir = (CalculatePos(theta_L,phi_L)).XYZ().GetNormalized();
-    program.SetUniform("lightDir",lightDir.x,lightDir.y,lightDir.z);
 }
 
 #pragma endregion CameraControl
@@ -163,7 +146,6 @@ void CompileShader(){
 
     //Set MVP uniform
     UpdateCam();
-    UpdateLight();
 
     //Bind Program
     program.Bind();
@@ -189,17 +171,9 @@ void cb_MouseAngles(GLFWwindow* window, double posX, double posY){
     lastX = posX;
     lastY = posY;
 
-    if(ctrlPressed){
-        phi_L += offsetX / 180.0f * M_PI;
-        theta_L -= offsetY / 180.0f * M_PI;
-        UpdateLight();
-        return;
-    }
-
     phi += offsetX / 180.0f * M_PI;
     theta -= offsetY / 180.0f * M_PI;
     UpdateCam();
-
 }
 
 void cb_MouseDistance(GLFWwindow* window, double posX, double posY){
@@ -216,7 +190,6 @@ void cb_MouseDistance(GLFWwindow* window, double posX, double posY){
     distance -= distance_Diff;
     if(distance <= 1) distance = 1;
     UpdateCam();
-
 }
 
 void cb_MouseButton(GLFWwindow* window, int button, int action, int mods){
@@ -250,7 +223,6 @@ void cb_MouseButton(GLFWwindow* window, int button, int action, int mods){
                         break;
                 }
             }
-            UpdateLight();
             UpdateCam();
             lastX = 0;
             lastY = 0;
@@ -264,10 +236,6 @@ void cb_MouseButton(GLFWwindow* window, int button, int action, int mods){
         std::cout << "Distance: " << distance << std::endl;
         std::cout << "Theta:    " << theta/M_PI << " * PI" << std::endl;
         std::cout << "Phi:      " << phi/M_PI << " * PI" << std::endl;
-        std::cout << "Current Light Status:" << std::endl;
-        std::cout << "Dir:      (" << lightDir.x << ", " << lightDir.y << ", " << lightDir.z << ")" << std::endl;
-        std::cout << "Theta:    " << theta_L/M_PI << " * PI" << std::endl;
-        std::cout << "Phi:      " << phi_L/M_PI << " * PI" << std::endl;
     }
 }
 
@@ -282,9 +250,6 @@ void cb_Key(GLFWwindow* window, int key, int scancode, int action, int mods){
             if(action == GLFW_PRESS){
                 CompileShader();
             }
-            break;
-        case GLFW_KEY_LEFT_CONTROL:
-            ctrlPressed = action == GLFW_PRESS;
             break;
     }
 }
@@ -308,7 +273,7 @@ int main(int argc, const char * argv[]) {
     glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT,GL_TRUE);
 
     //Create a GLFW window
-    GLFWwindow* pWindow = glfwCreateWindow(1600, 1000, "Project 3 - Shading", nullptr, nullptr);
+    GLFWwindow* pWindow = glfwCreateWindow(1600, 1000, "Project 2 - Transformations", nullptr, nullptr);
     if(!pWindow) {
         glfwTerminate();
         exit(EXIT_FAILURE);
@@ -348,66 +313,7 @@ int main(int argc, const char * argv[]) {
     //Calculate mesh information
     mesh.ComputeBoundingBox();
 
-    std::cout<< "Num of Faces           : " << mesh.NF() << std::endl;
-    std::cout<< "Num of Materials       : " << mesh.NM() << std::endl;
-
 #pragma endregion LoadFlies
-
-#pragma region VertexData
-
-    std::cout<< "Num of Vertex Positions: " << mesh.NV() << std::endl;
-    std::cout<< "Num of Vertex Normals  : " << mesh.NVN() << std::endl;
-
-    //Prepare Vertex Buffer Data
-    std::vector<cyVec3f> positionBufferData;
-    std::vector<cyVec3f> normalBufferData;
-    std::vector<GLuint> indexBufferData;
-
-    unsigned int max = cy::Max(mesh.NV(),mesh.NVN());
-    for(int vi = 0; vi < max; vi++){
-        positionBufferData.push_back(vi < mesh.NV() ? mesh.V(vi) : mesh.V(0));
-        normalBufferData.push_back(vi < mesh.NVN() ? mesh.VN(vi) : mesh.VN(0));
-    }
-
-    for(int i = 0; i < mesh.NF(); i++){
-        for(int j = 0; j < 3; j++){
-            //Set up triangle vertex buffer data
-            unsigned int index = mesh.F(i).v[j];
-            unsigned int indexN = mesh.FN(i).v[j];
-
-            if(indexN == index){
-                indexBufferData.push_back(index);
-            }
-            else {//we need to duplicate the Vertex
-                bool added = false;
-                for(unsigned int mi = max; mi < positionBufferData.size(); mi++){
-                    if(positionBufferData.at(mi) == mesh.V(index) &&
-                    normalBufferData.at(mi) == mesh.VN(indexN))
-                    {
-                        //This Duplicated vertex is already added, do not add again
-                        added = true;
-                        indexBufferData.push_back(mi);
-                        break;
-                    }
-                }
-                if(!added){
-                    unsigned int newIndex = positionBufferData.size();
-                    positionBufferData.push_back(mesh.V(index));
-                    normalBufferData.push_back(mesh.VN(indexN));
-                    indexBufferData.push_back(newIndex);
-                }
-            }
-        }
-    }
-
-    float efficiency = (float)(positionBufferData.size()*sizeof(cyVec3f) + normalBufferData.size()*sizeof(cyVec3f) + indexBufferData.size() * sizeof(GLuint)) / (float)(mesh.NF() * 3 * (2 * sizeof(cyVec3f)+ sizeof(cyVec2f)));
-
-    std::cout << "Size of position buffer: " << positionBufferData.size() << std::endl;
-    std::cout << "Size of normal buffer  : " << normalBufferData.size() << std::endl;
-    std::cout << "Size of index buffer   : " << indexBufferData.size() << std::endl;
-    std::cout << "Optimized Memory Ratio : " << efficiency*100 << "%" << std::endl;
-
-#pragma endregion VertexData
 
 #pragma region Shader
 
@@ -424,33 +330,22 @@ int main(int argc, const char * argv[]) {
     glBindVertexArray(vao);
 
     //Generate and bind a VBO for the Pos
-    GLuint vbo[2];
-    glGenBuffers(2,&vbo[0]);
+    GLuint vbo;
+    glGenBuffers(1,&vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+
+    //Load the vertex data into the VBO
+    glBufferData(GL_ARRAY_BUFFER,sizeof(cy::Vec3f)*mesh.NV(),&mesh.V(0),GL_STATIC_DRAW);
 
     //Link buffer data to vertex shader
     GLuint pos  = program.AttribLocation("iPos");
-    GLuint posN = program.AttribLocation("iNormal");
-
-    //Init & Bind the position buffer to vbo[0] and vao
-    glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(cyVec3f) * positionBufferData.size(), positionBufferData.data(), GL_STATIC_DRAW);
-    //Set up the format of position buffer
-    glVertexAttribPointer(pos, 3, GL_FLOAT,GL_FALSE, 0, 0);
     glEnableVertexAttribArray(pos);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    //Similar Operation for the normal buffer
-    glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(cyVec3f) * normalBufferData.size(), normalBufferData.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(posN, 3, GL_FLOAT, GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(posN);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    //define VBO format
+    glVertexAttribPointer(pos,3,GL_FLOAT,GL_FALSE,0,(GLvoid*)0);
+    //bind vbo again and unbind vao for later use
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
-    //Generate a EBO/IBO for indexing
-    GLuint ibo;
-    glGenBuffers(1, &ibo);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int) * indexBufferData.size(), indexBufferData.data(), GL_STATIC_DRAW);
 
 #pragma endregion VertexBuffer
 
@@ -469,7 +364,7 @@ int main(int argc, const char * argv[]) {
         }
         glfwPollEvents();
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-        glDrawElements(GL_TRIANGLES, indexBufferData.size(), GL_UNSIGNED_INT, nullptr);
+        glDrawArrays(GL_POINTS,0,mesh.NV());
 
         //Swap Buffers to render
         glfwSwapBuffers(pWindow);

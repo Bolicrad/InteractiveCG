@@ -1,67 +1,69 @@
-# CS 6610 Project 3 - Shading
+# CS 6610 Project 2 - Transformations
 
 ## ScreenShot
-![Project3](assets/Project3.png)
+![Project2](assets/Project2.png)
 ## What you implemented
-1. Seperate VBOs for position and normal.
-2. Optimized the ram occupation by implementing EBO.
-3. (CS 6610 Requirement) Moveable light direction.
-4. Vertex Shader processing positions and normals to view space.
-5. Fragment Shader calculate the value for Blinn Shading.
+1. Refactor the project upon GLFW, on MacOS, via CMake.
+2. VBO/VAO generating and binding.
+3. Reading .obj file from argv.
+4. Simple Fragment Shader and Vertex Shader.
+5. Mouse button callback to register/cancel mouse move callbacks. 
+6. Mouse movement Callback to recieve x/y offsets.
+7. algorithm that calculate new position and target vector for the View Matrix.
+8. (CS 6610 Requirement)F6 recompile the shaders.
+9. (CS 6610 Requirement)Centered the Model by translate the model matrix.
 
 ## Additional functionalities beyond project requirements
-For the generating of data and Element Buffer Object, I optimized a little bit to reduce the data dupilicating, which could save 40% - 60% memory consumption compared with the simplest method.
+In mouse button callback, I utilized a trick to enable both button hold, and only cancel all callbacks when all buttons released. If I first hold left, I can drag to rotate; then I also hold right button, the fuction will not change; but if I then released left button, the zoom fuction would be registered.
 
 ```cpp
-    std::vector<cyVec3f> positionBufferData;
-    std::vector<cyVec3f> normalBufferData;
-    std::vector<GLuint> indexBufferData;
+int holdCount = 0;
 
-    unsigned int max = cy::Max(mesh.NV(),mesh.NVN());
-    for(int vi = 0; vi < max; vi++){
-        positionBufferData.push_back(vi < mesh.NV() ? mesh.V(vi) : mesh.V(0));
-        normalBufferData.push_back(vi < mesh.NVN() ? mesh.VN(vi) : mesh.VN(0));
-    }
+...
 
-    for(int i = 0; i < mesh.NF(); i++){
-        for(int j = 0; j < 3; j++){
-            //Set up triangle vertex buffer data
-            unsigned int index = mesh.F(i).v[j];
-            unsigned int indexN = mesh.FN(i).v[j];
-            if(indexN == index){
-                indexBufferData.push_back(index);
+void cb_MouseButton(GLFWwindow* window, int button, int action, int mods){
+    if(button == GLFW_MOUSE_BUTTON_LEFT || button == GLFW_MOUSE_BUTTON_RIGHT){
+        if(action == GLFW_PRESS){
+            if(holdCount == 0){
+                switch(button){
+                    case GLFW_MOUSE_BUTTON_LEFT:
+                        glfwSetCursorPosCallback(window, cb_MouseAngles);
+                        break;
+                    case GLFW_MOUSE_BUTTON_RIGHT:
+                        glfwSetCursorPosCallback(window, cb_MouseDistance);
+                        break;
+                }
+            }
+            holdCount++;
+        }
+        if(action == GLFW_RELEASE){
+            holdCount--;
+            if(holdCount == 0){
+                glfwSetCursorPosCallback(window, cb_MouseIdle);
             }
             else {
-                bool added = false;
-                for(unsigned int mi = max; mi < positionBufferData.size();mi++){
-                    if(positionBufferData.at(mi)==mesh.V(index) &&
-                    normalBufferData.at(mi)==mesh.VN(indexN)){
-                        //This Duplicated vertex is already added, do not add again
-                        added = true;
-                        indexBufferData.push_back(mi);
+                switch(button){
+                    case GLFW_MOUSE_BUTTON_RIGHT:
+                        glfwSetCursorPosCallback(window, cb_MouseAngles);
                         break;
-                    }
-                }
-                if(!added){
-                    unsigned int newIndex = positionBufferData.size();
-                    positionBufferData.push_back(mesh.V(index));
-                    normalBufferData.push_back(mesh.VN(indexN));
-                    indexBufferData.push_back(newIndex);
+                    case GLFW_MOUSE_BUTTON_LEFT:
+                        glfwSetCursorPosCallback(window, cb_MouseDistance);
+                        break;
                 }
             }
         }
     }
+}
 ``` 
 ## How to use the implementation
 
 This project is now a Clion project, so we need to run it under this IDE, or others that support cmake.
 
-After download and setup the environment, then click Run in your IDE, and you will see a 16:10 window appear on your screen, contains a textured teapot model with Blinn Shading. 
+After download and setup the environment, then click Run in your IDE, and you will see a 16:10 window appear on your screen, contains a model in vertices. 
 
 ### List of Inputs
 
 * Hold mouse left and drag, to rotate the view of the model;
-* Hold mouse left and drag, to rotate the light direction when ```ctrl``` is pressed; 
 * Hold mouse right and drag, to zoom in/out the camera of the model.
 * Press ```Esc``` to exit; 
 * Press ```F6``` to recompile the shader program.
