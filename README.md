@@ -1,4 +1,4 @@
-# CS 6610 Project 5 - Render Buffers
+# CS 6610 Project 4 - Textures
 
 ## ScreenShot
 
