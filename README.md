@@ -95,7 +95,7 @@ endif ()
     #define CY_NO_IMMINTRIN_H
     #define gluErrorString(value) (#value)
     ```
-2. For any included library, if it has any .cpp files, you need to add it to complile list by modfying the CMakeLists.txt like this:
+2. For any included library, if it has any .cpp files, you need to add it to compile list by modfying the CMakeLists.txt like this:
     ```cmake
     add_executable(Your-Executable-Name src/glad.c [library cpp directories] src/main.cpp)
     ```
