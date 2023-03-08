@@ -56,7 +56,7 @@ For the generating of data and Element Buffer Object, I optimized a little bit t
 
 This project is now a Clion project, so we need to run it under this IDE, or others that support cmake.
 
-After download and setup the environment, then click Run in your IDE, and you will see a 16:10 window appear on your screen, contains a textured teapot model with Blinn Shading. 
+After download and setup the environment, then click Run in your IDE, and you will see a 16:10 window appear on your screen, contains a teapot model with Blinn Shading. 
 
 ### List of Inputs
 
