@@ -1,5 +1,4 @@
 # CS 6610 Project 5 - Render Buffers
-> Lei Zhao u1322846
 
 ## ScreenShot
 ![ScreenShot](assets/Project5.jpg)
@@ -30,10 +29,8 @@ void main()
     oTexCoord = vec2(iPos.x/aspectRatio,iPos.y)/2 + vec2(0.5, 0.5);
     gl_Position = mvp * vec4(iPos, 1);
 }
-
 ``` 
  
-
 ## How to use the implementation
 
 This project is now a Clion project, so we need to run it under this IDE, or others that support cmake.
@@ -64,10 +61,12 @@ I developed and tested this project on Latest MacOS 13.2.1, and the architecture
 The environment is now set up and ready for debugging the project you copied from me.
 ### To create a empty project under this environment:
 
-1. Create a empty Clion Project.
-2. Copy the src folder in glad to the root of project. Drag the main.cpp into src folder.
-3. Under the root of project, create a folder named "includes". For any external libraries, put in this folder.
-4. Then Modify the CMakeLists.txt like this:
+1. Create a empty Clion Project. (Or other IDE supports Cmake)
+2. Copy the src folder in glad to the root of project. 
+3. Drag the main.cpp into src folder.
+4. Under the root of project, create a folder named "include". For any external libraries, put in this folder. 
+> The best practice for adding include libraries is to use ```git submodule add repo_url include/repo_name``` to have those external libraries installed if you are using git.
+5. Then Modify the CMakeLists.txt like this:
 ```cmake
 cmake_minimum_required(VERSION 3.24)
 project(Your-Project-Name)
