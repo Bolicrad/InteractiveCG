@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(CS6610)
+project(InteractiveCG)
 
 set(CMAKE_CXX_STANDARD 17)
 
@@ -8,7 +8,7 @@ set(CMAKE_OSX_ARCHITECTURES  "arm64" CACHE STRING "Build architectures for Mac O
 set(GLFW_LINK /opt/homebrew/lib/libglfw.3.dylib)
 link_libraries(${OPENGL} ${GLEW_LINK} ${GLFW_LINK})
 
-add_executable(OpenGL src/glad.c includes/loadpng/lodepng.cpp src/main.cpp)
+add_executable(OpenGL src/glad.c include/loadpng/lodepng.cpp src/main.cpp)
 target_include_directories(OpenGL PUBLIC /opt/homebrew/include)
 target_include_directories(OpenGL PRIVATE ${PROJECT_SOURCE_DIR}/include)
 
