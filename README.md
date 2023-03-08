@@ -1,36 +1,26 @@
-# CS 6610 Project 5 - Render Buffers
+# CS 6610 Project 3 - Shading
 
 ## ScreenShot
-
-The following pictures shows the Normal, Ambient, Diffuse, Specular and Blinn Result of the Textured teapot.
-
-> #### Normal![Normal](assets/Normal.png)
-> #### Ambient![Ambient](assets/Ambient.png)
-> #### Diffuse![Diffuse](assets/Diffuse.png)
-> #### Specular (Textured with Image)![Specular](assets/Specular.png)
-> #### Blinn ![Blinn](assets/Blinn.png)
-
+![Project3](assets/Project3.png)
 ## What you implemented
-1. Prepared texCoord buffer from the mesh data
-2. Loaded multiple image data from png file.
-3. In Vertex Shader, read & passed the texCoord data to next step.
-4. In Fragment Shader, used texture sampler and texCoord to calculate Kd value for Ambient and Diffuse.
-5. (CS 6610 Requirement) In Fragment Shader, used another texture sampler and texCoord to calculate Ks value for Specular.
+1. Seperate VBOs for position and normal.
+2. Optimized the ram occupation by implementing EBO.
+3. (CS 6610 Requirement) Moveable light direction.
+4. Vertex Shader processing positions and normals to view space.
+5. Fragment Shader calculate the value for Blinn Shading.
 
 ## Additional functionalities beyond project requirements
-For the generating of data and Element Buffer Object, I optimized a little bit to reduce the data dupilicating, which could save 50% - 70% memory consumption compared with the simplest method. For the texCoord Buffer, because it is usually less than the num of vertices, I defaultly copy it to each vertex data. 
+For the generating of data and Element Buffer Object, I optimized a little bit to reduce the data dupilicating, which could save 40% - 60% memory consumption compared with the simplest method.
 
 ```cpp
     std::vector<cyVec3f> positionBufferData;
     std::vector<cyVec3f> normalBufferData;
-    std::vector<cyVec2f> texCoordBufferData;
     std::vector<GLuint> indexBufferData;
 
     unsigned int max = cy::Max(mesh.NV(),mesh.NVN());
     for(int vi = 0; vi < max; vi++){
         positionBufferData.push_back(vi < mesh.NV() ? mesh.V(vi) : mesh.V(0));
         normalBufferData.push_back(vi < mesh.NVN() ? mesh.VN(vi) : mesh.VN(0));
-        texCoordBufferData.push_back(mesh.VT(0).XY());
     }
 
     for(int i = 0; i < mesh.NF(); i++){
@@ -38,18 +28,14 @@ For the generating of data and Element Buffer Object, I optimized a little bit t
             //Set up triangle vertex buffer data
             unsigned int index = mesh.F(i).v[j];
             unsigned int indexN = mesh.FN(i).v[j];
-            unsigned int indexT = mesh.FT(i).v[j];
             if(indexN == index){
                 indexBufferData.push_back(index);
-                texCoordBufferData.at(index).Set(mesh.VT(indexT).x, mesh.VT(indexT).y);
             }
             else {
                 bool added = false;
-                for(unsigned int mi = max; mi < positionBufferData.size(); mi++){
+                for(unsigned int mi = max; mi < positionBufferData.size();mi++){
                     if(positionBufferData.at(mi)==mesh.V(index) &&
-                    normalBufferData.at(mi)==mesh.VN(indexN) &&
-                    texCoordBufferData.at(mi) == mesh.VT(indexT).XY())
-                    {
+                    normalBufferData.at(mi)==mesh.VN(indexN)){
                         //This Duplicated vertex is already added, do not add again
                         added = true;
                         indexBufferData.push_back(mi);
@@ -60,13 +46,12 @@ For the generating of data and Element Buffer Object, I optimized a little bit t
                     unsigned int newIndex = positionBufferData.size();
                     positionBufferData.push_back(mesh.V(index));
                     normalBufferData.push_back(mesh.VN(indexN));
-                    texCoordBufferData.push_back(mesh.VT(indexT).XY());
                     indexBufferData.push_back(newIndex);
                 }
             }
         }
     }
-```  
+``` 
 ## How to use the implementation
 
 This project is now a Clion project, so we need to run it under this IDE, or others that support cmake.

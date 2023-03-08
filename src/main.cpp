@@ -308,7 +308,7 @@ int main(int argc, const char * argv[]) {
     glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT,GL_TRUE);
 
     //Create a GLFW window
-    GLFWwindow* pWindow = glfwCreateWindow(1600, 1000, "Project 4 - Textures", nullptr, nullptr);
+    GLFWwindow* pWindow = glfwCreateWindow(1600, 1000, "Project 3 - Shading", nullptr, nullptr);
     if(!pWindow) {
         glfwTerminate();
         exit(EXIT_FAILURE);
@@ -351,103 +351,38 @@ int main(int argc, const char * argv[]) {
     std::cout<< "Num of Faces           : " << mesh.NF() << std::endl;
     std::cout<< "Num of Materials       : " << mesh.NM() << std::endl;
 
-    //Load Image Data from PNG
-    std::string filename = "../models/";
-    filename.append(argc == 1? argv[0]:argv[1]);
-    filename.append("/");
-    filename.append(mesh.M(0).map_Kd);
-
-    std::string filename_S = "../models/";
-    filename_S.append(argc == 1? argv[0]:argv[1]);
-    filename_S.append("/");
-    filename_S.append(mesh.M(0).map_Ks);
-
-    std::vector<unsigned char> image;
-    unsigned width, height;
-    unsigned error = lodepng::decode(image, width, height, filename);
-
-    if(error != 0) {
-        std::cout << "error " << error << ": " << lodepng_error_text(error) << std::endl;
-        return 1;
-    }
-
-    std::vector<unsigned char> image_S;
-    unsigned error_S = lodepng::decode(image_S, width, height, filename_S);
-
-    if(error_S != 0) {
-        std::cout << "error " << error_S << ": " << lodepng_error_text(error_S) << std::endl;
-        return 1;
-    }
 #pragma endregion LoadFlies
-
-#pragma region BindTexture
-
-    //Bind Texture Units
-    GLuint texID[2];
-    glGenTextures(2, &texID[0]);
-
-    //For diffuse texture
-    glBindTexture(GL_TEXTURE_2D, texID[0]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.data());
-    glGenerateMipmap(GL_TEXTURE_2D);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,GL_REPEAT);
-
-    //For specular texture
-    glBindTexture(GL_TEXTURE_2D, texID[1]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image_S.data());
-    glGenerateMipmap(GL_TEXTURE_2D);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,GL_REPEAT);
-
-#pragma endregion BindTexture
 
 #pragma region VertexData
 
     std::cout<< "Num of Vertex Positions: " << mesh.NV() << std::endl;
     std::cout<< "Num of Vertex Normals  : " << mesh.NVN() << std::endl;
-    std::cout<< "Num of Vertex TexCoords: " << mesh.NVT() << std::endl;
-    std::cout<< "Diffuse Texture Name   : " << mesh.M(0).map_Kd << std::endl;
-    std::cout<< "Specular Texture Name  : " << mesh.M(0).map_Ks << std::endl;
-
 
     //Prepare Vertex Buffer Data
     std::vector<cyVec3f> positionBufferData;
     std::vector<cyVec3f> normalBufferData;
-    std::vector<cyVec2f> texCoordBufferData;
     std::vector<GLuint> indexBufferData;
 
     unsigned int max = cy::Max(mesh.NV(),mesh.NVN());
     for(int vi = 0; vi < max; vi++){
         positionBufferData.push_back(vi < mesh.NV() ? mesh.V(vi) : mesh.V(0));
         normalBufferData.push_back(vi < mesh.NVN() ? mesh.VN(vi) : mesh.VN(0));
-        texCoordBufferData.push_back(mesh.VT(0).XY());
     }
 
     for(int i = 0; i < mesh.NF(); i++){
-        //cy::TriMesh::TriFace face = mesh.F(i);
-        //cyVec3f N = (mesh.V(face.v[1])-mesh.V(face.v[0])) ^ (mesh.V(face.v[2])-mesh.V(face.v[0]));
         for(int j = 0; j < 3; j++){
             //Set up triangle vertex buffer data
             unsigned int index = mesh.F(i).v[j];
             unsigned int indexN = mesh.FN(i).v[j];
-            unsigned int indexT = mesh.FT(i).v[j];
-
 
             if(indexN == index){
                 indexBufferData.push_back(index);
-                texCoordBufferData.at(index).Set(mesh.VT(indexT).x, mesh.VT(indexT).y);
             }
             else {//we need to duplicate the Vertex
                 bool added = false;
                 for(unsigned int mi = max; mi < positionBufferData.size(); mi++){
                     if(positionBufferData.at(mi) == mesh.V(index) &&
-                    normalBufferData.at(mi) == mesh.VN(indexN) &&
-                    texCoordBufferData.at(mi) == mesh.VT(indexT).XY())
+                    normalBufferData.at(mi) == mesh.VN(indexN))
                     {
                         //This Duplicated vertex is already added, do not add again
                         added = true;
@@ -459,19 +394,16 @@ int main(int argc, const char * argv[]) {
                     unsigned int newIndex = positionBufferData.size();
                     positionBufferData.push_back(mesh.V(index));
                     normalBufferData.push_back(mesh.VN(indexN));
-                    texCoordBufferData.push_back(mesh.VT(indexT).XY());
                     indexBufferData.push_back(newIndex);
                 }
             }
         }
     }
 
-
-    float efficiency = (float)(positionBufferData.size()*sizeof(cyVec3f) + normalBufferData.size()*sizeof(cyVec3f) + texCoordBufferData.size() * sizeof(cyVec2f) + indexBufferData.size() * sizeof(GLuint)) / (float)(mesh.NF() * 3 * (2 * sizeof(cyVec3f)+ sizeof(cyVec2f)));
+    float efficiency = (float)(positionBufferData.size()*sizeof(cyVec3f) + normalBufferData.size()*sizeof(cyVec3f) + indexBufferData.size() * sizeof(GLuint)) / (float)(mesh.NF() * 3 * (2 * sizeof(cyVec3f)+ sizeof(cyVec2f)));
 
     std::cout << "Size of position buffer: " << positionBufferData.size() << std::endl;
     std::cout << "Size of normal buffer  : " << normalBufferData.size() << std::endl;
-    std::cout << "Size of texCoord buffer: " << texCoordBufferData.size() << std::endl;
     std::cout << "Size of index buffer   : " << indexBufferData.size() << std::endl;
     std::cout << "Optimized Memory Ratio : " << efficiency*100 << "%" << std::endl;
 
@@ -481,10 +413,6 @@ int main(int argc, const char * argv[]) {
 
     //Compile The Shader Program for the first time
     CompileShader();
-
-    //Send Texture Data to GPU
-    program.SetUniform("tex",0);
-    program.SetUniform("texS", 1);
 
 #pragma endregion Shader
 
@@ -496,13 +424,12 @@ int main(int argc, const char * argv[]) {
     glBindVertexArray(vao);
 
     //Generate and bind a VBO for the Pos
-    GLuint vbo[3];
-    glGenBuffers(3,&vbo[0]);
+    GLuint vbo[2];
+    glGenBuffers(2,&vbo[0]);
 
     //Link buffer data to vertex shader
     GLuint pos  = program.AttribLocation("iPos");
     GLuint posN = program.AttribLocation("iNormal");
-    GLuint posT = program.AttribLocation("iTexCoord");
 
     //Init & Bind the position buffer to vbo[0] and vao
     glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
@@ -517,13 +444,6 @@ int main(int argc, const char * argv[]) {
     glBufferData(GL_ARRAY_BUFFER, sizeof(cyVec3f) * normalBufferData.size(), normalBufferData.data(), GL_STATIC_DRAW);
     glVertexAttribPointer(posN, 3, GL_FLOAT, GL_FALSE, 0, 0);
     glEnableVertexAttribArray(posN);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    //Similar Operation for the texCoord buffer
-    glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(cyVec2f) * texCoordBufferData.size(), texCoordBufferData.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(posT, 2, GL_FLOAT, GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(posT);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     //Generate a EBO/IBO for indexing
@@ -549,10 +469,6 @@ int main(int argc, const char * argv[]) {
         }
         glfwPollEvents();
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D,texID[0]);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D,texID[1]);
         glDrawElements(GL_TRIANGLES, indexBufferData.size(), GL_UNSIGNED_INT, nullptr);
 
         //Swap Buffers to render

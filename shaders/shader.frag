@@ -2,21 +2,18 @@
 
 in vec3 oPos;
 in vec3 oNormal;
-in vec2 oTexCoord;
 
 out vec4 color;
 
 uniform vec3 lightDir;
-uniform sampler2D tex;
-uniform sampler2D texS;
 
 void main(){
     vec3 normal = normalize(oNormal);
-    vec3 viewDir = normalize(-oPos);
+    vec3 viewDir = -normalize(oPos);
     vec3 halfDir = normalize(lightDir + viewDir);
 
-    vec3 Kd = texture(tex, oTexCoord).rgb;
-    vec3 Ks = texture(texS, oTexCoord).rgb;
+    vec3 Kd = vec3(1,0,0);
+    vec3 Ks = vec3(1,1,1);
     int alpha = 10;
     float Intensity = 1;
     float Intensity_A = 0.2;
