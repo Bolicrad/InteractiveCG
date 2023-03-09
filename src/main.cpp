@@ -130,15 +130,10 @@ void UpdateCam(){
 
     camTarget = CalculatePos(theta,phi);
     camPos = - distance * camTarget;
+    program.SetUniform("camPos",camPos.x,camPos.y,camPos.z);
 
     viewMatrix = cy::Matrix4f::View(camPos,camTarget,camUp);
-
-    cy::Matrix4f mv = viewMatrix * modelMatrix;
-    cy::Matrix3f mvN = mv.GetInverse().GetTranspose().GetSubMatrix3();
     cy::Matrix4f mvp = projMatrix * viewMatrix * modelMatrix;
-
-    program.SetUniformMatrix4("mv",mv.cell);
-    program.SetUniformMatrix3("mvN",mvN.cell);
     program.SetUniformMatrix4("mvp",mvp.cell);
 
     //Update SkyBox
@@ -167,7 +162,9 @@ void CheckCenter(){
     if(mesh.IsBoundBoxReady()){
         cyVec3f center = (mesh.GetBoundMax() + mesh.GetBoundMin())/2;
         modelMatrix.SetTranslation(-center);
+        cy::Matrix3f mN = modelMatrix.GetInverse().GetTranspose().GetSubMatrix3();
         program.SetUniformMatrix4("m", modelMatrix.cell);
+        program.SetUniformMatrix3("mN",mN.cell);
         centered = true;
 
         //Update Camera
@@ -462,6 +459,7 @@ int main(int argc, const char * argv[]) {
     CompileShader();
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexId);
+    program.SetUniform("skybox",0);
     programC.SetUniform("skybox",0);
 
 #pragma endregion Shader
