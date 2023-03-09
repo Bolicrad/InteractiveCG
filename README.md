@@ -1,70 +1,59 @@
-# CS 6610 Project 3 - Shading
+# CS 6610 Project 6 Environment Mapping
 
 ## ScreenShot
-![Project3](assets/Project3.png)
+![Project6Step1](assets/Project6Step1.png)![Project6Step2](assets/Project6Step2.png)![Project6Step3](assets/Project6Step3.png)
 ## What you implemented
-1. Seperate VBOs for position and normal.
-2. Optimized the ram occupation by implementing EBO.
-3. (CS 6610 Requirement) Moveable light direction.
-4. Vertex Shader processing positions and normals to view space.
-5. Fragment Shader calculate the value for Blinn Shading.
+1. Created cube map texture from the images.
+2. Utilized a single triangle to render the skybox.
+3. Wrote fragment Shader for the teapot to calculate both environment mapping and specular light in World Space.
+4. (CS 6610 requirement)Created a plane to receive both environment mapping and object mapping, by rendering to texture.
 
 ## Additional functionalities beyond project requirements
-For the generating of data and Element Buffer Object, I optimized a little bit to reduce the data dupilicating, which could save 40% - 60% memory consumption compared with the simplest method.
+There is a platform bug on Apple Silicon Macs: if you tried to load multiple samplers in a single pass, the system will only load one texture. To avoid that problem without losing the desired effect, I seperate the render to plane operation into two passes:
 
-```cpp
-    std::vector<cyVec3f> positionBufferData;
-    std::vector<cyVec3f> normalBufferData;
-    std::vector<GLuint> indexBufferData;
+```glsl
+//mirror.frag
+# version 410 core
+in vec4 gl_FragCoord;
+out vec4 color;
 
-    unsigned int max = cy::Max(mesh.NV(),mesh.NVN());
-    for(int vi = 0; vi < max; vi++){
-        positionBufferData.push_back(vi < mesh.NV() ? mesh.V(vi) : mesh.V(0));
-        normalBufferData.push_back(vi < mesh.NVN() ? mesh.VN(vi) : mesh.VN(0));
-    }
+uniform sampler2DRect tex;
 
-    for(int i = 0; i < mesh.NF(); i++){
-        for(int j = 0; j < 3; j++){
-            //Set up triangle vertex buffer data
-            unsigned int index = mesh.F(i).v[j];
-            unsigned int indexN = mesh.FN(i).v[j];
-            if(indexN == index){
-                indexBufferData.push_back(index);
-            }
-            else {
-                bool added = false;
-                for(unsigned int mi = max; mi < positionBufferData.size();mi++){
-                    if(positionBufferData.at(mi)==mesh.V(index) &&
-                    normalBufferData.at(mi)==mesh.VN(indexN)){
-                        //This Duplicated vertex is already added, do not add again
-                        added = true;
-                        indexBufferData.push_back(mi);
-                        break;
-                    }
-                }
-                if(!added){
-                    unsigned int newIndex = positionBufferData.size();
-                    positionBufferData.push_back(mesh.V(index));
-                    normalBufferData.push_back(mesh.VN(indexN));
-                    indexBufferData.push_back(newIndex);
-                }
-            }
-        }
-    }
-``` 
+void main(){
+    vec4 C_Tex = texture(tex, gl_FragCoord.xy);
+    if(C_Tex.w < 0.1f)discard;
+    color = C_Tex;
+}
+
+//mirenv.frag
+# version 410 core
+in vec3 oDir;
+out vec4 color;
+
+uniform vec3 camPos;
+uniform vec3 mirNorm;
+uniform samplerCube skybox;
+
+void main(){
+    vec3 viewDir = normalize(camPos - oDir);
+    vec3 reflectDir = reflect(-viewDir, mirNorm);
+    vec4 C_Env = texture(skybox, reflectDir);
+    color = C_Env;
+}
+```
+The first pass samples the texture from previously rendered texture, and discard and fragment that cannot pass alpha test, which only renders the reflected teapot. The Second pass render the plane again, with only environment mapping colors.
 ## How to use the implementation
 
 This project is now a Clion project, so we need to run it under this IDE, or others that support cmake.
 
-After download and setup the environment, then click Run in your IDE, and you will see a 16:10 window appear on your screen, contains a teapot model with Blinn Shading. 
+After download and setup the environment, then click Run in your IDE, and you will see a 16:10 window appear on your screen, contains a teapot and a plane, both reflecting the environment lights.
 
 ### List of Inputs
 
-* Hold mouse left and drag, to rotate the view of the model;
+* Hold mouse left and drag, to rotate the view of the camera;
 * Hold mouse left and drag, to rotate the light direction when ```ctrl``` is pressed; 
-* Hold mouse right and drag, to zoom in/out the camera of the model.
+* Hold mouse right and drag, to zoom in/out the camera.
 * Press ```Esc``` to exit; 
-* Press ```F6``` to recompile the shader program.
 
 ## Envrionment, OS, External Libraries and Additional Requirements
 I developed and tested this project on Latest MacOS 13.2.1, and the architecture is Apple Silicon (Arm64). 
