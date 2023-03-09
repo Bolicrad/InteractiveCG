@@ -10,8 +10,8 @@
 
 //Parameters for Camera Control
 double distance = 100;
-double phi = M_PI;
-double theta = 0;
+double phi = 1.25*M_PI;
+double theta = 0.5*M_PI;
 
 //Parameters for Light Control
 double phi_L = 0;
@@ -20,7 +20,7 @@ cyVec3f lightDir = cyVec3f(0,-1,0);
 
 //Parameters of Camera
 cyVec3f camPos = cyVec3f(0,-distance,0);
-cyVec3f camTarget = cyVec3f(0,0,-1);
+cyVec3f camTarget = cyVec3f(0,0,0);
 cyVec3f camUp = cyVec3f (0,1,0);
 
 //MVP Matrices
@@ -31,7 +31,10 @@ cy::Matrix4f modelMatrix = cy::Matrix4f::Identity();
 //Containers for mesh & program
 cy::TriMesh mesh;
 cy::GLSLProgram program;
-cy::GLSLProgram programC;
+cy::GLSLProgram program_Skybox;
+cy::GLSLProgram program_MirCam;
+cy::GLSLProgram program_MirEnv;
+cy::GLSLProgram program_Mirror;
 
 //index for skybox data
 GLuint vao_skybox;
@@ -126,18 +129,22 @@ cyVec3f CalculatePos(double &iTheta, double &iPhi){
             );
 }
 
+
 void UpdateCam(){
 
-    camTarget = CalculatePos(theta,phi);
-    camPos = - distance * camTarget;
+    //Update World Camera
+    camPos = - distance  *  CalculatePos(theta,phi);
     program.SetUniform("camPos",camPos.x,camPos.y,camPos.z);
 
     viewMatrix = cy::Matrix4f::View(camPos,camTarget,camUp);
     cy::Matrix4f mvp = projMatrix * viewMatrix * modelMatrix;
     program.SetUniformMatrix4("mvp",mvp.cell);
 
+
     //Update SkyBox
     cy::Matrix4f vp = projMatrix * viewMatrix;
+    program_Skybox.SetUniformMatrix4("vp", vp.cell);
+
     cy::Matrix4f ivp = vp.GetInverse();
     cyVec3f skyboxVertices[3];
     skyboxVertices[0] = (ivp*cyVec3f(-1,-1,0.999)).XYZ()*1000;
@@ -148,12 +155,22 @@ void UpdateCam(){
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(cyVec3f)*3, skyboxVertices);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    programC.SetUniformMatrix4("vp",vp.cell);
+    //Update MirCam
+    program_MirCam.SetUniform("camPos", camPos.x,camPos.y,camPos.z);
+    program_MirCam.SetUniformMatrix4("vp",vp.cell);
+
+    //Update MirEnv
+    program_MirEnv.SetUniform("camPos", camPos.x, camPos.y, camPos.z);
+    program_MirEnv.SetUniformMatrix4("vp", vp.cell);
+
+    //Update Mirror
+    program_Mirror.SetUniformMatrix4("vp", vp.cell);
 }
 
 void UpdateLight(){
     lightDir = (CalculatePos(theta_L,phi_L)).XYZ().GetNormalized();
     program.SetUniform("lightDir",lightDir.x,lightDir.y,lightDir.z);
+    program_MirCam.SetUniform("lightDir",lightDir.x, lightDir.y, lightDir.z);
 }
 
 #pragma endregion CameraControl
@@ -165,6 +182,8 @@ void CheckCenter(){
         cy::Matrix3f mN = modelMatrix.GetInverse().GetTranspose().GetSubMatrix3();
         program.SetUniformMatrix4("m", modelMatrix.cell);
         program.SetUniformMatrix3("mN",mN.cell);
+        program_MirCam.SetUniformMatrix4("m", modelMatrix.cell);
+        program_MirCam.SetUniformMatrix3("mN", mN.cell);
         centered = true;
 
         //Update Camera
@@ -174,8 +193,11 @@ void CheckCenter(){
 
 void CompileShader(){
     //Create Shader Programs
+    program_MirCam.BuildFiles("../shaders/mircam.vert", "../shaders/shader.frag");
     program.BuildFiles("../shaders/shader.vert","../shaders/shader.frag");
-    programC.BuildFiles("../shaders/skybox.vert","../shaders/skybox.frag");
+    program_MirEnv.BuildFiles("../shaders/skybox.vert", "../shaders/mirenv.frag");
+    program_Mirror.BuildFiles("../shaders/skybox.vert","../shaders/mirror.frag");
+    program_Skybox.BuildFiles("../shaders/skybox.vert", "../shaders/skybox.frag");
     //Set MVP uniform
     UpdateCam();
     UpdateLight();
@@ -457,10 +479,14 @@ int main(int argc, const char * argv[]) {
 
     //Compile The Shader Program for the first time
     CompileShader();
-    glActiveTexture(GL_TEXTURE0);
+    glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexId);
-    program.SetUniform("skybox",0);
-    programC.SetUniform("skybox",0);
+    program.SetUniform("skybox",1);
+    program_Skybox.SetUniform("skybox", 1);
+    program_MirCam.SetUniform("skybox", 1);
+    program_MirEnv.SetUniform("skybox",1);
+    program_Mirror.SetUniform("tex",2);
+
 
 #pragma endregion Shader
 
@@ -512,7 +538,7 @@ int main(int argc, const char * argv[]) {
     //vbo for skybox
     glGenBuffers(1, &vbo_skybox);
 
-    GLuint pos_skybox = programC.AttribLocation("iPos");
+    GLuint pos_skybox = program_Skybox.AttribLocation("iPos");
 
     //Link Buffer Data to vbo_skybox
     glBindBuffer(GL_ARRAY_BUFFER, vbo_skybox);
@@ -525,12 +551,55 @@ int main(int argc, const char * argv[]) {
 
 #pragma endregion SkyBox
 
+#pragma region Mirror
+    float mirrorHeight = -8.0f;
+    program_MirCam.SetUniform("mirPos", 0.0f,mirrorHeight,0.0f);
+    program_MirCam.SetUniform("mirNorm",0.0f,1.0f,0.0f);
+    program_MirEnv.SetUniform("mirNorm",0.0f,1.0f,0.0f);
+
+    //vao
+    GLuint vao_mirror;
+    glGenVertexArrays(1, &vao_mirror);
+    glBindVertexArray(vao_mirror);
+
+    //vertex data
+    float mirrorLength = 80.0f;
+    static const GLfloat squareVertexPos[] = {
+            -mirrorLength / 2.0f, mirrorHeight, -mirrorLength / 2.0f,
+            -mirrorLength / 2.0f, mirrorHeight, mirrorLength / 2.0f,
+            mirrorLength / 2.0f, mirrorHeight, -mirrorLength / 2.0f,
+            mirrorLength / 2.0f, mirrorHeight, mirrorLength / 2.0f,
+    };
+
+    GLuint pos_square = program_Mirror.AttribLocation("iPos");
+
+    //vbo
+    GLuint vbo_mirror;
+    glGenBuffers(1, &vbo_mirror);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_mirror);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(squareVertexPos), squareVertexPos, GL_STATIC_DRAW);
+    glVertexAttribPointer(pos_square, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(pos_square);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
+#pragma endregion Mirror
+
+#pragma region RenderToTexture
+
+    int width_R = 3200;
+    int height_R = 2000;
+
+    cyGLRenderTextureRect renderBuffer;
+    renderBuffer.Initialize(true,4, width_R, height_R);
+    renderBuffer.SetTextureFilteringMode(GL_LINEAR,GL_LINEAR);
+
+#pragma endregion RenderToTexture
 #pragma region GLFWLifeCycle
     //Bind GLFW Callbacks
     glfwSetKeyCallback(pWindow,cb_Key);
     glfwSetMouseButtonCallback(pWindow,cb_MouseButton);
 
-    //glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
 
     //GLFW main loop
@@ -539,16 +608,42 @@ int main(int argc, const char * argv[]) {
             CheckCenter();
         }
         glfwPollEvents();
+        //Pass 1: render the object in mirror camera to mirror frame buffer
+        renderBuffer.Bind();
+        program_MirCam.Bind();
+        glBindVertexArray(vao);
+        glClearColor(0,0,0,0);
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+        glDrawElements(GL_TRIANGLES, indexBufferData.size(), GL_UNSIGNED_INT, nullptr);
+        renderBuffer.Unbind();
 
+        glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+        //Pass 2: render the object in world camera to default frame buffer
         program.Bind();
         glBindVertexArray(vao);
         glDrawElements(GL_TRIANGLES, indexBufferData.size(), GL_UNSIGNED_INT, nullptr);
 
+        //Pass 3: render the plane in world camera with the texture from pass 1;
+        glEnable(GL_CULL_FACE);
+        program_Mirror.Bind();
+        glBindVertexArray(vao_mirror);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_RECTANGLE, renderBuffer.GetTextureID());
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        glDisable(GL_CULL_FACE);
+
+        //Pass 4： render the plane in world camera with environment reflection;
+        program_MirEnv.Bind();
+        glBindVertexArray(vao_mirror);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexId);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+        //Pass 5: render the skybox(triangle) with Cube Map texture in world camera;
         glDepthMask(GL_FALSE);
-        programC.Bind();
+        program_Skybox.Bind();
         glBindVertexArray(vao_skybox);
-        glActiveTexture(GL_TEXTURE0);
+        glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexId);
         glDrawArrays(GL_TRIANGLES, 0, 3);
         glDepthMask(GL_TRUE);
