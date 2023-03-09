@@ -1,4 +1,4 @@
-# CS 6610 Project 6 Environment Mapping
+# CS 6610 Project 6 - Environment Mapping
 
 ## ScreenShot
 ![Project6Step1](assets/Project6Step1.png)![Project6Step2](assets/Project6Step2.png)![Project6Step3](assets/Project6Step3.png)
