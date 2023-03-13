@@ -44,16 +44,6 @@ cy::TriMesh mesh;
 cy::GLSLProgram program;
 cy::GLSLProgram program_shadow;
 
-//Parameters for mouse control
-int holdCount = 0;
-bool firstMov = true;
-double lastX;
-double lastY;
-bool ctrlPressed = false;
-
-// Check and translate the model to the Center
-bool centered = false;
-
 #pragma region ClearColor
 void HSV2RGB(int H, float S, float V, GLclampf& r, GLclampf& g, GLclampf& b){
     if(S>100)S=100;
@@ -134,10 +124,11 @@ cyVec3f CalculatePos(double &iTheta, double &iPhi){
 }
 
 void UpdateCam(){
-
     camPos = distance * CalculatePos(theta,phi);
+
     viewMatrix = cy::Matrix4f::View(camPos,camTarget,camUp);
     cy::Matrix4f mvp = projMatrix * viewMatrix * modelMatrix;
+
     program.SetUniformMatrix4("mvp",mvp.cell);
     program.SetUniform("camPos",camPos.x,camPos.y,camPos.z);
 }
@@ -155,11 +146,33 @@ void UpdateLight(){
 
 #pragma endregion CameraControl
 
+#pragma region Shader
+void SetUpUniforms(){
+    program.SetUniformMatrix4("m",modelMatrix.cell);
+    cy::Matrix3f mN = modelMatrix.GetInverse().GetTranspose().GetSubMatrix3();
+    program.SetUniformMatrix3("mN",mN.cell);
+    program.SetUniform("lightFovRad",lightFOV);
+}
+
+void CompileShader(){
+    //Create Shader Programs
+    program.BuildFiles("../shaders/shader.vert","../shaders/shader.frag");
+
+    //Set up "Constant" Uniforms
+    SetUpUniforms();
+
+    //Set up "Varying" Uniforms
+    UpdateCam();
+    UpdateLight();
+}
+
+// Check and translate the model to the Center
+bool centered = false;
 void CheckCenter(){
     if(mesh.IsBoundBoxReady()){
         cyVec3f center = (mesh.GetBoundMax() + mesh.GetBoundMin())/2;
         modelMatrix.SetTranslation(-center);
-        program.SetUniformMatrix4("m", modelMatrix.cell);
+        SetUpUniforms();
         centered = true;
 
         //Update Camera
@@ -167,22 +180,16 @@ void CheckCenter(){
     }
 }
 
-void CompileShader(){
-    //Create Shader Programs
-    program.BuildFiles("../shaders/shader.vert","../shaders/shader.frag");
-
-    //Set "Constant" Uniforms
-    cy::Matrix3f mN = modelMatrix.GetInverse().GetTranspose().GetSubMatrix3();
-    program.SetUniformMatrix4("m",modelMatrix.cell);
-    program.SetUniformMatrix3("mN",mN.cell);
-    program.SetUniform("lightFovRad",lightFOV);
-
-    //Set "Varying" Uniforms
-    UpdateCam();
-    UpdateLight();
-}
+#pragma endregion Shader
 
 #pragma region InputCallbacks
+
+//Parameters for Input Callbacks
+int holdCount = 0;
+bool firstMov = true;
+double lastX;
+double lastY;
+bool ctrlPressed = false;
 
 void cb_MouseIdle(GLFWwindow* window, double posX, double posY){
     //if(firstMov)firstMov = false;
@@ -369,9 +376,6 @@ int main(int argc, const char * argv[]) {
     //Calculate mesh information
     mesh.ComputeBoundingBox();
 
-    std::cout<< "Num of Faces           : " << mesh.NF() << std::endl;
-    std::cout<< "Num of Materials       : " << mesh.NM() << std::endl;
-
 #pragma endregion LoadFlies
 
 #pragma region VertexData
@@ -430,12 +434,12 @@ int main(int argc, const char * argv[]) {
 
 #pragma endregion VertexData
 
-#pragma region Shader
+#pragma region InitShader
 
     //Compile The Shader Program for the first time
     CompileShader();
 
-#pragma endregion Shader
+#pragma endregion InitShader
 
 #pragma region VertexBuffer
 
