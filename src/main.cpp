@@ -11,26 +11,38 @@
 //Parameters for Camera Control
 double distance = 100;
 double phi = M_PI;
-double theta = 0;
+double theta = 0.35 * M_PI;
 
 //Parameters for Light Control
-double phi_L = 0;
-double theta_L = M_PI;
-cyVec3f lightDir = cyVec3f(0,-1,0);
+double distance_L = 100;
+double phi_L = M_PI;
+double theta_L = 0.1*M_PI;
 
 //Parameters of Camera
 cyVec3f camPos = cyVec3f(0,-distance,0);
-cyVec3f camTarget = cyVec3f(0,0,-1);
+cyVec3f camTarget = cyVec3f(0,0,0);
 cyVec3f camUp = cyVec3f (0,1,0);
+float camFOV = 0.25*M_PI;
+
+//parameters of Spotlight
+cyVec3f lightPos = cyVec3f(0,distance,0);
+cyVec3f lightTarget = cyVec3f(0,0,0);
+cyVec3f lightUp = cyVec3f(0,1,0);
+float lightFOV = 0.25*M_PI;
 
 //MVP Matrices
-cy::Matrix4f projMatrix = cy::Matrix4f::Perspective(0.25 * M_PI,1.6f,0.1f,1000.0f);
+cy::Matrix4f projMatrix = cy::Matrix4f::Perspective(camFOV,1.6f,0.1f,1000.0f);
 cy::Matrix4f viewMatrix = cy::Matrix4f::View(camPos,camTarget,camUp);
 cy::Matrix4f modelMatrix = cy::Matrix4f::Identity();
+
+//LightCam Matrices
+cy::Matrix4f lightProjMatrix = cy::Matrix4f::Perspective(lightFOV,1.0f,0.1f,1000.0f);
+cy::Matrix4f lightMatrix = cy::Matrix4f::View(lightPos,lightTarget,lightUp);
 
 //Containers for mesh & program
 cy::TriMesh mesh;
 cy::GLSLProgram program;
+cy::GLSLProgram program_shadow;
 
 //Parameters for mouse control
 int holdCount = 0;
@@ -123,24 +135,22 @@ cyVec3f CalculatePos(double &iTheta, double &iPhi){
 
 void UpdateCam(){
 
-    camTarget = CalculatePos(theta,phi);
-    camPos = - distance * camTarget;
-
+    camPos = distance * CalculatePos(theta,phi);
     viewMatrix = cy::Matrix4f::View(camPos,camTarget,camUp);
-
-    cy::Matrix4f mv = viewMatrix * modelMatrix;
-    cy::Matrix3f mvN = mv.GetInverse().GetTranspose().GetSubMatrix3();
     cy::Matrix4f mvp = projMatrix * viewMatrix * modelMatrix;
-
-    program.SetUniformMatrix4("mv",mv.cell);
-    program.SetUniformMatrix3("mvN",mvN.cell);
     program.SetUniformMatrix4("mvp",mvp.cell);
-
+    program.SetUniform("camPos",camPos.x,camPos.y,camPos.z);
 }
 
 void UpdateLight(){
-    lightDir = (CalculatePos(theta_L,phi_L)).XYZ().GetNormalized();
-    program.SetUniform("lightDir",lightDir.x,lightDir.y,lightDir.z);
+    cyVec3f spotDir = - CalculatePos(theta_L,phi_L);
+    lightPos = - distance_L * spotDir;
+
+    program.SetUniform("spotDir",spotDir.x,spotDir.y,spotDir.z);
+    program.SetUniform("lightPos",lightPos.x,lightPos.y,lightPos.z);
+
+    lightMatrix = cy::Matrix4f ::View(lightPos,lightTarget,lightUp);
+    cyMatrix4f mvp = lightProjMatrix * lightMatrix * modelMatrix;
 }
 
 #pragma endregion CameraControl
@@ -161,12 +171,15 @@ void CompileShader(){
     //Create Shader Programs
     program.BuildFiles("../shaders/shader.vert","../shaders/shader.frag");
 
-    //Set MVP uniform
+    //Set "Constant" Uniforms
+    cy::Matrix3f mN = modelMatrix.GetInverse().GetTranspose().GetSubMatrix3();
+    program.SetUniformMatrix4("m",modelMatrix.cell);
+    program.SetUniformMatrix3("mN",mN.cell);
+    program.SetUniform("lightFovRad",lightFOV);
+
+    //Set "Varying" Uniforms
     UpdateCam();
     UpdateLight();
-
-    //Bind Program
-    program.Bind();
 }
 
 #pragma region InputCallbacks
@@ -191,13 +204,13 @@ void cb_MouseAngles(GLFWwindow* window, double posX, double posY){
 
     if(ctrlPressed){
         phi_L += offsetX / 180.0f * M_PI;
-        theta_L -= offsetY / 180.0f * M_PI;
+        theta_L += offsetY / 180.0f * M_PI;
         UpdateLight();
         return;
     }
 
     phi += offsetX / 180.0f * M_PI;
-    theta -= offsetY / 180.0f * M_PI;
+    theta += offsetY / 180.0f * M_PI;
     UpdateCam();
 
 }
@@ -213,8 +226,15 @@ void cb_MouseDistance(GLFWwindow* window, double posX, double posY){
 
     float distance_Diff = offsetY;
 
+    if(ctrlPressed){
+        distance_L -= distance_Diff;
+        if(distance_L <= 10) distance_L = 10;
+        UpdateLight();
+        return;
+    }
+
     distance -= distance_Diff;
-    if(distance <= 1) distance = 1;
+    if(distance <= 10) distance = 10;
     UpdateCam();
 
 }
@@ -265,7 +285,8 @@ void cb_MouseButton(GLFWwindow* window, int button, int action, int mods){
         std::cout << "Theta:    " << theta/M_PI << " * PI" << std::endl;
         std::cout << "Phi:      " << phi/M_PI << " * PI" << std::endl;
         std::cout << "Current Light Status:" << std::endl;
-        std::cout << "Dir:      (" << lightDir.x << ", " << lightDir.y << ", " << lightDir.z << ")" << std::endl;
+        std::cout << "Pos:      (" << lightPos.x << ", " << lightPos.y << ", " << lightPos.z << ")" << std::endl;
+        std::cout << "Distance: " << distance_L << std::endl;
         std::cout << "Theta:    " << theta_L/M_PI << " * PI" << std::endl;
         std::cout << "Phi:      " << phi_L/M_PI << " * PI" << std::endl;
     }
@@ -468,6 +489,9 @@ int main(int argc, const char * argv[]) {
             CheckCenter();
         }
         glfwPollEvents();
+
+        //Render the world Camera
+        program.Bind();
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
         glDrawElements(GL_TRIANGLES, indexBufferData.size(), GL_UNSIGNED_INT, nullptr);
 
