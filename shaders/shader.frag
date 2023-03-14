@@ -43,4 +43,10 @@ void main(){
     //Compute Shadow
     color *= textureProj(shadow, lightViewPos);
     color += vec4(C_Ambient,0);
+
+//    //Debug Output
+//    float result = textureProj(shadow, lightViewPos);
+//    if(result == 1)color = vec4(1,0,0,1);
+//    else if(result == 0)color = vec4(0,0,1,1);
+//    else color = vec4(0,1,0,1);
 }

@@ -9,14 +9,14 @@
 #include "loadpng/lodepng.h"
 
 //Parameters for Camera Control
-double distance = 100;
-double phi = M_PI;
+double distance = 150;
+double phi = 1.2 * M_PI;
 double theta = 0.35 * M_PI;
 
 //Parameters for Light Control
-double distance_L = 100;
-double phi_L = M_PI;
-double theta_L = 0.1*M_PI;
+double distance_L = 50;
+double phi_L = 1.2* M_PI;
+double theta_L = 0.4 * M_PI;
 
 //Parameters of Camera
 cyVec3f camPos = cyVec3f(0,-distance,0);
@@ -28,7 +28,7 @@ float camFOV = 0.25*M_PI;
 cyVec3f lightPos = cyVec3f(0,distance,0);
 cyVec3f lightTarget = cyVec3f(0,0,0);
 cyVec3f lightUp = cyVec3f(0,1,0);
-float lightFOV = 0.25*M_PI;
+float lightFOV = 0.3*M_PI;
 
 //MVP Matrices
 cy::Matrix4f projMatrix = cy::Matrix4f::Perspective(camFOV,1.6f,0.1f,1000.0f);
@@ -43,7 +43,7 @@ cy::Matrix4f lightMatrix = cy::Matrix4f::View(lightPos,lightTarget,lightUp);
 cy::TriMesh mesh;
 cy::GLSLProgram program;
 cy::GLSLProgram program_shadow;
-cy::GLSLProgram program_debug;
+cy::GLSLProgram program_hint;
 
 #pragma region ClearColor
 void HSV2RGB(int H, float S, float V, GLclampf& r, GLclampf& g, GLclampf& b){
@@ -128,12 +128,13 @@ void UpdateCam(){
     camPos = distance * CalculatePos(theta,phi);
 
     viewMatrix = cy::Matrix4f::View(camPos,camTarget,camUp);
-    cy::Matrix4f mvp = projMatrix * viewMatrix * modelMatrix;
+    cy::Matrix4f vp = projMatrix * viewMatrix * modelMatrix;
+    cy::Matrix4f mvp = vp * modelMatrix;
 
     program.SetUniformMatrix4("mvp",mvp.cell);
     program.SetUniform("camPos",camPos.x,camPos.y,camPos.z);
 
-    program_debug.SetUniformMatrix4("mvp", mvp.cell);
+    program_hint.SetUniformMatrix4("vp", vp.cell);
 }
 
 void UpdateLight(){
@@ -147,11 +148,16 @@ void UpdateLight(){
     cyMatrix4f mvp = lightProjMatrix * lightMatrix * modelMatrix;
     program_shadow.SetUniformMatrix4("mvp", mvp.cell);
 
-    float shadowBias = 0.01f;
-    cyMatrix4f mShadow = mvp
+    float shadowBias = 0.00003f;
+    cyMatrix4f mShadow = cyMatrix4f::Translation(cyVec3f(0.5f,0.5f,0.5f - shadowBias))
             * cyMatrix4f::Scale(0.5f)
-            * cyMatrix4f::Translation(cyVec3f(0.5f,0.5f,0.5f - shadowBias));
+            * mvp;
+
     program.SetUniformMatrix4("matrixShadow",mShadow.cell);
+
+    cyMatrix4f hintModel = cyMatrix4f::Translation(lightPos)
+            * cyMatrix4f::Rotation(cyVec3f(0,1,0),spotDir);
+    program_hint.SetUniformMatrix4("m", hintModel.cell);
 
 }
 
@@ -169,7 +175,7 @@ void CompileShader(){
     //Create Shader Programs
     program.BuildFiles("../shaders/shader.vert","../shaders/shader.frag");
     program_shadow.BuildFiles("../shaders/shadow.vert", "../shaders/shadow.frag");
-    program_debug.BuildFiles("../shaders/debug.vert","../shaders/debug.frag");
+    program_hint.BuildFiles("../shaders/debug.vert", "../shaders/debug.frag");
     //Set up "Constant" Uniforms
     SetUpUniforms();
 
@@ -349,7 +355,7 @@ int main(int argc, const char * argv[]) {
     glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT,GL_TRUE);
 
     //Create a GLFW window
-    GLFWwindow* pWindow = glfwCreateWindow(1600, 1000, "Project 3 - Shading", nullptr, nullptr);
+    GLFWwindow* pWindow = glfwCreateWindow(1600, 1000, "Project 7 - Shadow Mapping", nullptr, nullptr);
     if(!pWindow) {
         glfwTerminate();
         exit(EXIT_FAILURE);
@@ -494,6 +500,88 @@ int main(int argc, const char * argv[]) {
 
 #pragma endregion VertexBuffer
 
+#pragma region Plane
+
+    //vao
+    GLuint vao_square;
+    glGenVertexArrays(1, &vao_square);
+    glBindVertexArray(vao_square);
+
+    //vertex data
+    float squareSize = 128.0f;
+    static const GLfloat squareVertexPos[] = {
+            -squareSize/2.0f, 0.0f, -squareSize/2.0f,
+            squareSize/2.0f, 0.0f, -squareSize/2.0f,
+            -squareSize/2.0f, 0.0f, squareSize/2.0f,
+            squareSize/2.0f,  0.0f,squareSize/2.0f,
+    };
+    static const GLfloat squareVertexNorm[] = {
+            0.0f, 1.0f, 0.0f,
+            0.0f, 1.0f, 0.0f,
+            0.0f, 1.0f, 0.0f,
+            0.0f, 1.0f, 0.0f,
+    };
+
+    GLuint pos_square = program.AttribLocation("iPos");
+    GLuint posN_square = program.AttribLocation("iNormal");
+
+    //vbo
+    GLuint vbo_square[2];
+    glGenBuffers(2, vbo_square);
+
+    //Position
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_square[0]);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(squareVertexPos), squareVertexPos, GL_STATIC_DRAW);
+    glVertexAttribPointer(pos_square, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(pos_square);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    //Normal
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_square[1]);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(squareVertexNorm), squareVertexNorm, GL_STATIC_DRAW);
+    glVertexAttribPointer(posN_square, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(posN_square);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    glBindVertexArray(0);
+
+#pragma endregion Plane
+
+#pragma region hintObject
+
+    //vao
+    GLuint vao_hint;
+    glGenVertexArrays(1, &vao_hint);
+    glBindVertexArray(vao_hint);
+
+    //vertex data
+    float height_hint = 2.0f;
+    float width_hint = sqrt(2.0f)*height_hint*tan(lightFOV/2);
+
+    static const GLfloat hintVertexPos[] = {
+            0.0f, 0.0f, 0.0f,
+            -width_hint/2.0f, height_hint, -width_hint/2.0f,
+            width_hint/2.0f, height_hint, -width_hint/2.0f,
+            width_hint/2.0f, height_hint, width_hint/2.0f,
+            -width_hint/2.0f, height_hint, width_hint/2.0f,
+            -width_hint/2.0f, height_hint, -width_hint/2.0f,
+    };
+
+    GLuint pos_hint = program_hint.AttribLocation("iPos");
+
+    //vbo
+    GLuint vbo_hint;
+    glGenBuffers(1, &vbo_hint);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_hint);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(hintVertexPos), hintVertexPos, GL_STATIC_DRAW);
+    glVertexAttribPointer(pos_hint, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(pos_hint);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    glBindVertexArray(0);
+
+#pragma endregion hintObject
+
 #pragma region RenderToTexture
 
     int width_R = 1024;
@@ -502,43 +590,11 @@ int main(int argc, const char * argv[]) {
     cyGLRenderDepth2D shadowMap;
     shadowMap.Initialize(true, width_R, height_R);
     shadowMap.SetTextureFilteringMode(GL_LINEAR, GL_LINEAR);
+    shadowMap.SetTextureWrappingMode(GL_CLAMP_TO_EDGE,GL_CLAMP_TO_EDGE);
 
     program.SetUniform("shadow",0);
-    program_debug.SetUniform("shadow",0);
 
 #pragma endregion RenderToTexture
-
-#pragma region DebugSquare
-
-    //vao
-    GLuint vao_square;
-    glGenVertexArrays(1, &vao_square);
-    glBindVertexArray(vao_square);
-
-    //vertex data
-    float squareSize = 64.0f;
-    static const GLfloat squareVertexPos[] = {
-            -squareSize/2.0f, 0.0f, -squareSize/2.0f,
-            squareSize/2.0f, 0.0f, -squareSize/2.0f,
-            -squareSize/2.0f, 0.0f, squareSize/2.0f,
-            squareSize/2.0f,  0.0f,squareSize/2.0f,
-    };
-    program_debug.SetUniform("length",squareSize);
-
-    GLuint pos_square = program_debug.AttribLocation("iPos");
-
-    //vbo
-    GLuint vbo_square;
-    glGenBuffers(1, &vbo_square);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_square);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(squareVertexPos), squareVertexPos, GL_STATIC_DRAW);
-    glVertexAttribPointer(pos_square, 3, GL_FLOAT, GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(pos_square);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    glBindVertexArray(0);
-
-#pragma endregion DebugSquare
 
 #pragma region GLFWLifeCycle
     //Bind GLFW Callbacks
@@ -562,16 +618,6 @@ int main(int argc, const char * argv[]) {
         glDrawElements(GL_TRIANGLES, indexBufferData.size(), GL_UNSIGNED_INT, nullptr);
         shadowMap.Unbind();
 
-
-//        //Render the debug plane
-//        program_debug.Bind();
-//        glBindVertexArray(vao_square);
-//        glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-//        glActiveTexture(GL_TEXTURE0);
-//        glBindTexture(GL_TEXTURE_2D, shadowMap.GetTextureID());
-//        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-
-
         //Render the world Camera
         program.Bind();
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
@@ -579,6 +625,13 @@ int main(int argc, const char * argv[]) {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, shadowMap.GetTextureID());
         glDrawElements(GL_TRIANGLES, indexBufferData.size(), GL_UNSIGNED_INT, nullptr);
+        glBindVertexArray(vao_square);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+        //Render the Hint Object
+        program_hint.Bind();
+        glBindVertexArray(vao_hint);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, 6);
 
         //Swap Buffers to render
         glfwSwapBuffers(pWindow);
