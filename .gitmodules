@@ -1,0 +1,6 @@
+[submodule "include/cyCodeBase"]
+	path = include/cyCodeBase
+	url = https://github.com/cemyuksel/cyCodeBase.git
+[submodule "include/loadpng"]
+	path = include/loadpng
+	url = https://github.com/lvandeve/lodepng.git
