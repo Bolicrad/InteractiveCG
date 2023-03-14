@@ -1,70 +1,82 @@
-# CS 6610 Project 3 - Shading
-
+# CS 6610 Project 7 - Shadow Mapping
 ## ScreenShot
-![Project3](assets/Project3.png)
+![Project3](assets/Project7.png)
 ## What you implemented
-1. Seperate VBOs for position and normal.
-2. Optimized the ram occupation by implementing EBO.
-3. (CS 6610 Requirement) Moveable light direction.
-4. Vertex Shader processing positions and normals to view space.
-5. Fragment Shader calculate the value for Blinn Shading.
+1. Rendered the depth buffer to shadow map from the perspective of the spotlight.
+2. Calculated the shadow result into the color value of the fragment shader in world camera.
+3. Also cast the shadow on a plane under the teapot, by render it in the same pass of rendering the teapot.
+4. (CS 6610 Requirement) Control the spotlight position independently, form 3 parameters: distance, theta and phi, just like the camera.
+5. (CS 6610 Requirement) Created a hint object which represents the position and orientation of the spotlight, from data.
 
 ## Additional functionalities beyond project requirements
-For the generating of data and Element Buffer Object, I optimized a little bit to reduce the data dupilicating, which could save 40% - 60% memory consumption compared with the simplest method.
 
-```cpp
-    std::vector<cyVec3f> positionBufferData;
-    std::vector<cyVec3f> normalBufferData;
-    std::vector<GLuint> indexBufferData;
+Since we have a spotlight, only calculate the shadow from a constant color is not ideal for rendering. In the fragment shader of the main pass, I turned the Blinn material receiving the blinn color from spotlight parameters.
 
-    unsigned int max = cy::Max(mesh.NV(),mesh.NVN());
-    for(int vi = 0; vi < max; vi++){
-        positionBufferData.push_back(vi < mesh.NV() ? mesh.V(vi) : mesh.V(0));
-        normalBufferData.push_back(vi < mesh.NVN() ? mesh.VN(vi) : mesh.VN(0));
+```glsl
+//shader.frag
+# version 410 core
+
+in vec3 worldPos;
+in vec3 worldNormal;
+in vec4 lightViewPos;
+
+out vec4 color;
+
+uniform vec3 camPos;
+uniform vec3 spotDir;
+uniform vec3 lightPos;
+uniform float lightFovRad;
+uniform sampler2DShadow shadow;
+
+void main(){
+    color = vec4(0,0,0,1);
+
+    //Compute Ambient
+    vec3 Kd = vec3(1,0,0);
+    float Intensity_A = 0.2;
+    vec3 C_Ambient = Intensity_A * Kd;
+
+    //Determine if light is on this fragment;
+    vec3 lightDir = normalize(lightPos - worldPos);
+    float angle = max(acos(dot(spotDir, -lightDir)),0);
+    if(angle <= lightFovRad) {
+        //Compute Diffuse, Specular and Blin
+        vec3 normal = normalize(worldNormal);
+        vec3 viewDir = normalize(camPos - worldPos);
+        vec3 halfDir = normalize(lightDir + viewDir);
+
+        vec3 Ks = vec3(1,1,1);
+        int alpha = 10;
+        float Intensity = 1;
+
+        vec3 C_Diffuse = Intensity * max(dot(normal, lightDir),0.0)* Kd;
+        vec3 C_Specular = Intensity * pow(max(dot(normal, halfDir), 0.0), alpha) * Ks;
+        vec3 C_Blinn = C_Ambient + C_Diffuse + C_Specular;
+
+        color += vec4(C_Blinn,0);
     }
 
-    for(int i = 0; i < mesh.NF(); i++){
-        for(int j = 0; j < 3; j++){
-            //Set up triangle vertex buffer data
-            unsigned int index = mesh.F(i).v[j];
-            unsigned int indexN = mesh.FN(i).v[j];
-            if(indexN == index){
-                indexBufferData.push_back(index);
-            }
-            else {
-                bool added = false;
-                for(unsigned int mi = max; mi < positionBufferData.size();mi++){
-                    if(positionBufferData.at(mi)==mesh.V(index) &&
-                    normalBufferData.at(mi)==mesh.VN(indexN)){
-                        //This Duplicated vertex is already added, do not add again
-                        added = true;
-                        indexBufferData.push_back(mi);
-                        break;
-                    }
-                }
-                if(!added){
-                    unsigned int newIndex = positionBufferData.size();
-                    positionBufferData.push_back(mesh.V(index));
-                    normalBufferData.push_back(mesh.VN(indexN));
-                    indexBufferData.push_back(newIndex);
-                }
-            }
-        }
-    }
-``` 
+    //Compute Shadow
+    color *= textureProj(shadow, lightViewPos);
+    color += vec4(C_Ambient,0);
+}
+```
+
+As you can see in the last line, I added the Ambient component after calculate the shadow, to avoid having pure black fragment, which makes the shadow more significant from the clear color.
+
 ## How to use the implementation
 
 This project is now a Clion project, so we need to run it under this IDE, or others that support cmake.
 
-After download and setup the environment, then click Run in your IDE, and you will see a 16:10 window appear on your screen, contains a teapot model with Blinn Shading. 
+After download and setup the environment, then click Run in your IDE, and you will see a 16:10 window appear on your screen, contains a teapot model with Blinn Shading, casting its shadows on the underneath plane, as well as itself. 
 
 ### List of Inputs
 
 * Hold mouse left and drag, to rotate the view of the model;
 * Hold mouse left and drag, to rotate the light direction when ```ctrl``` is pressed; 
 * Hold mouse right and drag, to zoom in/out the camera of the model.
+* Hold mouse right and drag, to translate the light position from/to the scene center when ```ctrl``` is pressed; 
 * Press ```Esc``` to exit; 
-* Press ```F6``` to recompile the shader program.
 
 ## Envrionment, OS, External Libraries and Additional Requirements
 I developed and tested this project on Latest MacOS 13.2.1, and the architecture is Apple Silicon (Arm64). 
