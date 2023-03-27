@@ -41,6 +41,7 @@ cy::Matrix4f lightMatrix = cy::Matrix4f::View(lightPos,lightTarget,lightUp);
 
 //Containers for mesh & program
 cy::GLSLProgram program;
+cy::GLSLProgram program_outline;
 cy::GLSLProgram program_shadow;
 cy::GLSLProgram program_hint;
 
@@ -133,6 +134,8 @@ void UpdateCam(){
     program.SetUniformMatrix4("mvp",mvp.cell);
     program.SetUniform("camPos",camPos.x,camPos.y,camPos.z);
 
+    program_outline.SetUniformMatrix4("vp",vp.cell);
+
     program_hint.SetUniformMatrix4("vp", vp.cell);
 }
 
@@ -165,14 +168,14 @@ void UpdateLight(){
 #pragma region Shader
 void SetUpUniforms(){
     program.SetUniformMatrix4("m",modelMatrix.cell);
-    cy::Matrix3f mN = modelMatrix.GetInverse().GetTranspose().GetSubMatrix3();
-    program.SetUniformMatrix3("mN",mN.cell);
     program.SetUniform("lightFovRad",lightFOV);
+    program_outline.SetUniformMatrix4("m", modelMatrix.cell);
 }
 
 void CompileShader(){
     //Create Shader Programs
     program.BuildFiles("../shaders/shader.vert","../shaders/shader.frag");
+    program_outline.BuildFiles("../shaders/outline.vert", "../shaders/outline.frag", "../shaders/outline.geom");
     //program_shadow.BuildFiles("../shaders/shadow.vert", "../shaders/shadow.frag");
     program_hint.BuildFiles("../shaders/debug.vert", "../shaders/debug.frag");
     //Set up "Constant" Uniforms
@@ -208,6 +211,7 @@ bool firstMov = true;
 double lastX;
 double lastY;
 bool ctrlPressed = false;
+bool renderOutline = false;
 
 void cb_MouseIdle(GLFWwindow* window, double posX, double posY){
     //if(firstMov)firstMov = false;
@@ -331,6 +335,11 @@ void cb_Key(GLFWwindow* window, int key, int scancode, int action, int mods){
             break;
         case GLFW_KEY_LEFT_CONTROL:
             ctrlPressed = action == GLFW_PRESS;
+            break;
+        case GLFW_KEY_SPACE:
+            if(action == GLFW_PRESS) {
+                renderOutline = !renderOutline;
+            }
             break;
     }
 }
@@ -553,6 +562,13 @@ int main(int argc, const char * argv[]) {
         glBindTexture(GL_TEXTURE_2D, normalMap.GetID());
         glBindVertexArray(vao_square);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+        //Render the outline of Plane
+        if(renderOutline){
+            program_outline.Bind();
+            glBindVertexArray(vao_square);
+            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        }
 
         //Render the Hint Object
         program_hint.Bind();
