@@ -9,14 +9,14 @@
 #include "loadpng/lodepng.h"
 
 //Parameters for Camera Control
-double distance = 150;
-double phi = 1.2 * M_PI;
-double theta = 0.35 * M_PI;
+double distance = 300;
+double phi = 0 * M_PI;
+double theta = 0.45 * M_PI;
 
 //Parameters for Light Control
-double distance_L = 50;
-double phi_L = 1.2* M_PI;
-double theta_L = 0.4 * M_PI;
+double distance_L = 85;
+double phi_L = 0 * M_PI;
+double theta_L = 0.45 * M_PI;
 
 //Parameters of Camera
 cyVec3f camPos = cyVec3f(0,-distance,0);
@@ -40,7 +40,6 @@ cy::Matrix4f lightProjMatrix = cy::Matrix4f::Perspective(lightFOV,1.0f,0.1f,1000
 cy::Matrix4f lightMatrix = cy::Matrix4f::View(lightPos,lightTarget,lightUp);
 
 //Containers for mesh & program
-cy::TriMesh mesh;
 cy::GLSLProgram program;
 cy::GLSLProgram program_shadow;
 cy::GLSLProgram program_hint;
@@ -174,7 +173,7 @@ void SetUpUniforms(){
 void CompileShader(){
     //Create Shader Programs
     program.BuildFiles("../shaders/shader.vert","../shaders/shader.frag");
-    program_shadow.BuildFiles("../shaders/shadow.vert", "../shaders/shadow.frag");
+    //program_shadow.BuildFiles("../shaders/shadow.vert", "../shaders/shadow.frag");
     program_hint.BuildFiles("../shaders/debug.vert", "../shaders/debug.frag");
     //Set up "Constant" Uniforms
     SetUpUniforms();
@@ -186,7 +185,7 @@ void CompileShader(){
 
 // Check and translate the model to the Center
 bool centered = false;
-void CheckCenter(){
+void CheckCenter(cyTriMesh mesh){
     if(mesh.IsBoundBoxReady()){
         cyVec3f center = (mesh.GetBoundMax() + mesh.GetBoundMin())/2;
         modelMatrix.SetTranslation(-center);
@@ -338,6 +337,23 @@ void cb_Key(GLFWwindow* window, int key, int scancode, int action, int mods){
 
 #pragma endregion InputCallbacks
 
+#pragma region TextureFuncs
+
+std::vector<unsigned char> LoadImage(const char* fileName, unsigned width, unsigned height){
+    std::string filePath = "../textures/";
+    filePath.append(fileName);
+    filePath.append(".png");
+
+    std::vector<unsigned char> image;
+    unsigned error = lodepng::decode(image,width,height,filePath);
+    if(error!=0){
+        std::cout << "error " << error << ": " << lodepng_error_text(error) << std::endl;
+    }
+    return image;
+}
+
+#pragma endregion TextureFuncs
+
 int main(int argc, const char * argv[]) {
 
 #pragma region InitEnv
@@ -355,7 +371,7 @@ int main(int argc, const char * argv[]) {
     glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT,GL_TRUE);
 
     //Create a GLFW window
-    GLFWwindow* pWindow = glfwCreateWindow(1600, 1000, "Project 7 - Shadow Mapping", nullptr, nullptr);
+    GLFWwindow* pWindow = glfwCreateWindow(1600, 1000, "Project 8 - Tessellation", nullptr, nullptr);
     if(!pWindow) {
         glfwTerminate();
         exit(EXIT_FAILURE);
@@ -379,79 +395,13 @@ int main(int argc, const char * argv[]) {
 #pragma endregion InitEnv
 
 #pragma region LoadFlies
-    //Load mesh from obj
-    std::string modelPath = "../models/";
-    modelPath.append(argc == 1? argv[0]:argv[1]);
-    modelPath.append("/");
-    modelPath.append(argc == 1? argv[0]:argv[1]);
-    modelPath.append(".obj");
-
-    bool success = mesh.LoadFromFileObj(modelPath.c_str());
-    if(!success){
-        glfwTerminate();
-        exit(EXIT_FAILURE);
-    }
-
-    //Calculate mesh information
-    mesh.ComputeBoundingBox();
+    //Load image from png
+    unsigned width = 512;
+    unsigned height = 512;
+    auto image_normal = LoadImage("teapot_normal", width, height);
+    auto image_disp = LoadImage("teapot_disp",width,height);
 
 #pragma endregion LoadFlies
-
-#pragma region VertexData
-
-    std::cout<< "Num of Vertex Positions: " << mesh.NV() << std::endl;
-    std::cout<< "Num of Vertex Normals  : " << mesh.NVN() << std::endl;
-
-    //Prepare Vertex Buffer Data
-    std::vector<cyVec3f> positionBufferData;
-    std::vector<cyVec3f> normalBufferData;
-    std::vector<GLuint> indexBufferData;
-
-    unsigned int max = cy::Max(mesh.NV(),mesh.NVN());
-    for(int vi = 0; vi < max; vi++){
-        positionBufferData.push_back(vi < mesh.NV() ? mesh.V(vi) : mesh.V(0));
-        normalBufferData.push_back(vi < mesh.NVN() ? mesh.VN(vi) : mesh.VN(0));
-    }
-
-    for(int i = 0; i < mesh.NF(); i++){
-        for(int j = 0; j < 3; j++){
-            //Set up triangle vertex buffer data
-            unsigned int index = mesh.F(i).v[j];
-            unsigned int indexN = mesh.FN(i).v[j];
-
-            if(indexN == index){
-                indexBufferData.push_back(index);
-            }
-            else {//we need to duplicate the Vertex
-                bool added = false;
-                for(unsigned int mi = max; mi < positionBufferData.size(); mi++){
-                    if(positionBufferData.at(mi) == mesh.V(index) &&
-                    normalBufferData.at(mi) == mesh.VN(indexN))
-                    {
-                        //This Duplicated vertex is already added, do not add again
-                        added = true;
-                        indexBufferData.push_back(mi);
-                        break;
-                    }
-                }
-                if(!added){
-                    unsigned int newIndex = positionBufferData.size();
-                    positionBufferData.push_back(mesh.V(index));
-                    normalBufferData.push_back(mesh.VN(indexN));
-                    indexBufferData.push_back(newIndex);
-                }
-            }
-        }
-    }
-
-    float efficiency = (float)(positionBufferData.size()*sizeof(cyVec3f) + normalBufferData.size()*sizeof(cyVec3f) + indexBufferData.size() * sizeof(GLuint)) / (float)(mesh.NF() * 3 * (2 * sizeof(cyVec3f)+ sizeof(cyVec2f)));
-
-    std::cout << "Size of position buffer: " << positionBufferData.size() << std::endl;
-    std::cout << "Size of normal buffer  : " << normalBufferData.size() << std::endl;
-    std::cout << "Size of index buffer   : " << indexBufferData.size() << std::endl;
-    std::cout << "Optimized Memory Ratio : " << efficiency*100 << "%" << std::endl;
-
-#pragma endregion VertexData
 
 #pragma region InitShader
 
@@ -460,45 +410,23 @@ int main(int argc, const char * argv[]) {
 
 #pragma endregion InitShader
 
-#pragma region VertexBuffer
+#pragma region BindTexture
 
-    //Generate and bind a VAO
-    GLuint vao;
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
+    cyGLTexture2D normalMap;
+    normalMap.Initialize();
+    normalMap.SetImage(image_normal.data(),4, width, height);
+    normalMap.SetFilteringMode(GL_LINEAR, GL_LINEAR_MIPMAP_LINEAR);
+    normalMap.BuildMipmaps();
 
-    //Generate and bind a VBO for the Pos
-    GLuint vbo[2];
-    glGenBuffers(2,&vbo[0]);
+    cyGLTexture2D displacementMap;
+    displacementMap.Initialize();
+    displacementMap.SetImage(image_disp.data(),4, width, height);
+    displacementMap.SetFilteringMode(GL_LINEAR, GL_LINEAR_MIPMAP_LINEAR);
+    displacementMap.BuildMipmaps();
 
-    //Link buffer data to vertex shader
-    GLuint pos  = program.AttribLocation("iPos");
-    GLuint posN = program.AttribLocation("iNormal");
+    program.SetUniform("normalMap",1);
 
-    //Init & Bind the position buffer to vbo[0] and vao
-    glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(cyVec3f) * positionBufferData.size(), positionBufferData.data(), GL_STATIC_DRAW);
-    //Set up the format of position buffer
-    glVertexAttribPointer(pos, 3, GL_FLOAT,GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(pos);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    //Similar Operation for the normal buffer
-    glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(cyVec3f) * normalBufferData.size(), normalBufferData.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(posN, 3, GL_FLOAT, GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(posN);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    //Generate a EBO/IBO for indexing
-    GLuint ibo;
-    glGenBuffers(1, &ibo);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int) * indexBufferData.size(), indexBufferData.data(), GL_STATIC_DRAW);
-
-    glBindVertexArray(0);
-
-#pragma endregion VertexBuffer
+#pragma endregion BindTexture
 
 #pragma region Plane
 
@@ -510,20 +438,22 @@ int main(int argc, const char * argv[]) {
     //vertex data
     float squareSize = 128.0f;
     static const GLfloat squareVertexPos[] = {
-            -squareSize/2.0f, 0.0f, -squareSize/2.0f,
-            squareSize/2.0f, 0.0f, -squareSize/2.0f,
-            -squareSize/2.0f, 0.0f, squareSize/2.0f,
-            squareSize/2.0f,  0.0f,squareSize/2.0f,
+            -squareSize/2.0f, -squareSize/2.0f, 0.0f,
+            squareSize/2.0f, -squareSize/2.0f, 0.0f,
+            -squareSize/2.0f, squareSize/2.0f, 0.0f,
+            squareSize/2.0f,squareSize/2.0f,  0.0f,
     };
-    static const GLfloat squareVertexNorm[] = {
-            0.0f, 1.0f, 0.0f,
-            0.0f, 1.0f, 0.0f,
-            0.0f, 1.0f, 0.0f,
-            0.0f, 1.0f, 0.0f,
+
+    //texCoord data
+    static const GLfloat squareTexCoord[] = {
+            0.0f,1.0f,
+            1.0f,1.0f,
+            0.0f,0.0f,
+            1.0f,0.0f,
     };
 
     GLuint pos_square = program.AttribLocation("iPos");
-    GLuint posN_square = program.AttribLocation("iNormal");
+    GLuint tex_square = program.AttribLocation("iTexCoord");
 
     //vbo
     GLuint vbo_square[2];
@@ -536,11 +466,10 @@ int main(int argc, const char * argv[]) {
     glEnableVertexAttribArray(pos_square);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    //Normal
     glBindBuffer(GL_ARRAY_BUFFER, vbo_square[1]);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(squareVertexNorm), squareVertexNorm, GL_STATIC_DRAW);
-    glVertexAttribPointer(posN_square, 3, GL_FLOAT, GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(posN_square);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(squareTexCoord), squareTexCoord, GL_STATIC_DRAW);
+    glVertexAttribPointer(tex_square, 2, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(tex_square);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     glBindVertexArray(0);
@@ -592,7 +521,7 @@ int main(int argc, const char * argv[]) {
     shadowMap.SetTextureFilteringMode(GL_LINEAR, GL_LINEAR);
     shadowMap.SetTextureWrappingMode(GL_CLAMP_TO_EDGE,GL_CLAMP_TO_EDGE);
 
-    program.SetUniform("shadow",0);
+    //program.SetUniform("shadow",0);
 
 #pragma endregion RenderToTexture
 
@@ -605,26 +534,23 @@ int main(int argc, const char * argv[]) {
 
     //GLFW main loop
     while(!glfwWindowShouldClose(pWindow)){
-        if(!centered){
-            CheckCenter();
-        }
         glfwPollEvents();
 
-        //Render the shadow Camera
-        shadowMap.Bind();
-        glClear(GL_DEPTH_BUFFER_BIT);
-        program_shadow.Bind();
-        glBindVertexArray(vao);
-        glDrawElements(GL_TRIANGLES, indexBufferData.size(), GL_UNSIGNED_INT, nullptr);
-        shadowMap.Unbind();
+//        //Render the shadow Camera
+//        shadowMap.Bind();
+//        glClear(GL_DEPTH_BUFFER_BIT);
+//        program_shadow.Bind();
+//        glBindVertexArray(vao);
+//        glDrawElements(GL_TRIANGLES, indexBufferData.size(), GL_UNSIGNED_INT, nullptr);
+//        shadowMap.Unbind();
 
         //Render the world Camera
         program.Bind();
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-        glBindVertexArray(vao);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, shadowMap.GetTextureID());
-        glDrawElements(GL_TRIANGLES, indexBufferData.size(), GL_UNSIGNED_INT, nullptr);
+//        glActiveTexture(GL_TEXTURE0);
+//        glBindTexture(GL_TEXTURE_2D, shadowMap.GetTextureID());
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, normalMap.GetID());
         glBindVertexArray(vao_square);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 

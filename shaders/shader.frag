@@ -1,8 +1,8 @@
 # version 410 core
 
 in vec3 worldPos;
-in vec3 worldNormal;
 in vec4 lightViewPos;
+in vec2 texCoord;
 
 out vec4 color;
 
@@ -10,7 +10,8 @@ uniform vec3 camPos;
 uniform vec3 spotDir;
 uniform vec3 lightPos;
 uniform float lightFovRad;
-uniform sampler2DShadow shadow;
+//uniform sampler2DShadow shadow;
+uniform sampler2D normalMap;
 
 void main(){
     color = vec4(0,0,0,1);
@@ -24,8 +25,8 @@ void main(){
     vec3 lightDir = normalize(lightPos - worldPos);
     float angle = max(acos(dot(spotDir, -lightDir)),0);
     if(angle <= lightFovRad) {
-        //Compute Diffuse, Specular and Blin
-        vec3 normal = normalize(worldNormal);
+        //Compute Diffuse, Specular and Blinn
+        vec3 normal = normalize(texture(normalMap, texCoord).rgb * 2.0f - 1.0f);
         vec3 viewDir = normalize(camPos - worldPos);
         vec3 halfDir = normalize(lightDir + viewDir);
 
@@ -41,12 +42,6 @@ void main(){
     }
 
     //Compute Shadow
-    color *= textureProj(shadow, lightViewPos);
+//    color *= textureProj(shadow, lightViewPos);
     color += vec4(C_Ambient,0);
-
-//    //Debug Output
-//    float result = textureProj(shadow, lightViewPos);
-//    if(result == 1)color = vec4(1,0,0,1);
-//    else if(result == 0)color = vec4(0,0,1,1);
-//    else color = vec4(0,1,0,1);
 }
