@@ -10,6 +10,7 @@ uniform vec3 camPos;
 uniform vec3 spotDir;
 uniform vec3 lightPos;
 uniform float lightFovRad;
+uniform bool hasDisp;
 uniform sampler2DShadow shadowMap;
 uniform sampler2D normalMap;
 
@@ -42,6 +43,6 @@ void main(){
     }
 
     //Compute Shadow
-    color *= textureProj(shadowMap, lightViewPos);
+    if(hasDisp)color *= textureProj(shadowMap, lightViewPos);
     color += vec4(C_Ambient,0);
 }

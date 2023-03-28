@@ -189,6 +189,9 @@ void SetUpUniforms(){
     program.SetUniform("dispSize", 8.0f);
     program_outline.SetUniform("dispSize", 8.0f);
     program_shadow.SetUniform("dispSize", 8.0f);
+    program.SetUniform("tessLevel", 1);
+    program_outline.SetUniform("tessLevel",1);
+    program_shadow.SetUniform("tessLevel", 1);
 }
 
 void CompileShader(){
@@ -204,7 +207,6 @@ void CompileShader(){
     //Set up "Varying" Uniforms
     UpdateCam();
     UpdateLight();
-    ModTessLevel(15);
 }
 
 // Check and translate the model to the Center
@@ -483,6 +485,8 @@ int main(int argc, const char * argv[]) {
         program_outline.SetUniform("dispMap",2);
         program_shadow.SetUniform("dispMap",2);
     }
+
+    program.SetUniform("hasDisp", hasDisp);
 
 #pragma endregion BindTexture
 
