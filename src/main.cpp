@@ -175,6 +175,7 @@ int ModTessLevel(int delta = 0){
     if(value > 64) value = 64;
     program.SetUniform("tessLevel", value);
     program_outline.SetUniform("tessLevel",value);
+    program_shadow.SetUniform("tessLevel", value);
     return value;
 }
 
@@ -183,10 +184,11 @@ int ModTessLevel(int delta = 0){
 #pragma region Shader
 void SetUpUniforms(){
     program.SetUniformMatrix4("m",modelMatrix.cell);
+    program_outline.SetUniformMatrix4("m", modelMatrix.cell);
     program.SetUniform("lightFovRad",lightFOV);
     program.SetUniform("dispSize", 8.0f);
     program_outline.SetUniform("dispSize", 8.0f);
-    program_outline.SetUniformMatrix4("m", modelMatrix.cell);
+    program_shadow.SetUniform("dispSize", 8.0f);
 }
 
 void CompileShader(){
@@ -194,7 +196,7 @@ void CompileShader(){
     //Create Shader Programs
     program.BuildFiles("../shaders/shader.vert","../shaders/shader.frag", nullptr, "../shaders/shader.tesc", "../shaders/shader.tese");
     program_outline.BuildFiles("../shaders/shader.vert", "../shaders/outline.frag", "../shaders/outline.geom", "../shaders/shader.tesc", "../shaders/outline.tese");
-    //program_shadow.BuildFiles("../shaders/shadow.vert", "../shaders/shadow.frag");
+    program_shadow.BuildFiles("../shaders/shader.vert", "../shaders/shadow.frag", nullptr,  "../shaders/shader.tesc", "../shaders/shadow.tese");
     program_hint.BuildFiles("../shaders/debug.vert", "../shaders/debug.frag");
     //Set up "Constant" Uniforms
     SetUpUniforms();
@@ -479,6 +481,7 @@ int main(int argc, const char * argv[]) {
 
         program.SetUniform("dispMap",2);
         program_outline.SetUniform("dispMap",2);
+        program_shadow.SetUniform("dispMap",2);
     }
 
 #pragma endregion BindTexture
@@ -578,7 +581,7 @@ int main(int argc, const char * argv[]) {
     shadowMap.SetTextureFilteringMode(GL_LINEAR, GL_LINEAR);
     shadowMap.SetTextureWrappingMode(GL_CLAMP_TO_EDGE,GL_CLAMP_TO_EDGE);
 
-    //program.SetUniform("shadow",0);
+    program.SetUniform("shadowMap",3);
 
 #pragma endregion RenderToTexture
 
@@ -593,28 +596,28 @@ int main(int argc, const char * argv[]) {
     while(!glfwWindowShouldClose(pWindow)){
         glfwPollEvents();
 
-//        //Render the plane in shadow Camera
-//        shadowMap.Bind();
-//        glClear(GL_DEPTH_BUFFER_BIT);
-//        program_shadow.Bind();
-//        if(hasDisp){
-//            glActiveTexture(GL_TEXTURE2);
-//            glBindTexture(GL_TEXTURE_2D, displacementMap.GetID());
-//        }
-//        glBindVertexArray(vao_square);
-//        glDrawElements(GL_PATCHES, 0, 4);
-//        shadowMap.Unbind();
+        //Render the plane in shadow Camera
+        if(hasDisp) {
+            shadowMap.Bind();
+            glClear(GL_DEPTH_BUFFER_BIT);
+            program_shadow.Bind();
+            glActiveTexture(GL_TEXTURE2);
+            glBindTexture(GL_TEXTURE_2D, displacementMap.GetID());
+            glBindVertexArray(vao_square);
+            glDrawArrays(GL_PATCHES, 0, 4);
+            shadowMap.Unbind();
+        }
 
         //Render the plane in world Camera
         program.Bind();
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-//        glActiveTexture(GL_TEXTURE0);
-//        glBindTexture(GL_TEXTURE_2D, shadowMap.GetTextureID());
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, normalMap.GetID());
         if(hasDisp){
             glActiveTexture(GL_TEXTURE2);
             glBindTexture(GL_TEXTURE_2D, displacementMap.GetID());
+            glActiveTexture(GL_TEXTURE3);
+            glBindTexture(GL_TEXTURE_2D, shadowMap.GetTextureID());
         }
         glBindVertexArray(vao_square);
         glDrawArrays(GL_PATCHES, 0, 4);
