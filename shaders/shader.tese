@@ -11,6 +11,8 @@ out vec4 lightViewPos;
 uniform mat4 m;
 uniform mat4 matrixShadow;
 uniform mat4 mvp;
+uniform sampler2D dispMap;
+uniform float dispSize;
 
 vec2 interpolate(vec2 v0, vec2 v1, vec2 v2, vec2 v3){
     vec2 a = mix(v0, v1, gl_TessCoord.x);
@@ -38,6 +40,8 @@ void main() {
         texCoordTS[2],
         texCoordTS[3]
     );
+
+    p.z += texture(dispMap, texCoord).y * dispSize * 2.0f - dispSize / 2.0f;
 
     worldPos = vec3(m * p);
     lightViewPos = matrixShadow * p;

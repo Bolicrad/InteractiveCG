@@ -184,6 +184,8 @@ int ModTessLevel(int delta = 0){
 void SetUpUniforms(){
     program.SetUniformMatrix4("m",modelMatrix.cell);
     program.SetUniform("lightFovRad",lightFOV);
+    program.SetUniform("dispSize", 8.0f);
+    program_outline.SetUniform("dispSize", 8.0f);
     program_outline.SetUniformMatrix4("m", modelMatrix.cell);
 }
 
@@ -191,7 +193,7 @@ void CompileShader(){
 
     //Create Shader Programs
     program.BuildFiles("../shaders/shader.vert","../shaders/shader.frag", nullptr, "../shaders/shader.tesc", "../shaders/shader.tese");
-    program_outline.BuildFiles("../shaders/outline.vert", "../shaders/outline.frag", "../shaders/outline.geom", "../shaders/outline.tesc", "../shaders/outline.tese");
+    program_outline.BuildFiles("../shaders/shader.vert", "../shaders/outline.frag", "../shaders/outline.geom", "../shaders/shader.tesc", "../shaders/outline.tese");
     //program_shadow.BuildFiles("../shaders/shadow.vert", "../shaders/shadow.frag");
     program_hint.BuildFiles("../shaders/debug.vert", "../shaders/debug.frag");
     //Set up "Constant" Uniforms
@@ -476,6 +478,7 @@ int main(int argc, const char * argv[]) {
         displacementMap.BuildMipmaps();
 
         program.SetUniform("dispMap",2);
+        program_outline.SetUniform("dispMap",2);
     }
 
 #pragma endregion BindTexture
@@ -594,8 +597,12 @@ int main(int argc, const char * argv[]) {
 //        shadowMap.Bind();
 //        glClear(GL_DEPTH_BUFFER_BIT);
 //        program_shadow.Bind();
-//        glBindVertexArray(vao);
-//        glDrawElements(GL_TRIANGLES, indexBufferData.size(), GL_UNSIGNED_INT, nullptr);
+//        if(hasDisp){
+//            glActiveTexture(GL_TEXTURE2);
+//            glBindTexture(GL_TEXTURE_2D, displacementMap.GetID());
+//        }
+//        glBindVertexArray(vao_square);
+//        glDrawElements(GL_PATCHES, 0, 4);
 //        shadowMap.Unbind();
 
         //Render the plane in world Camera
@@ -605,12 +612,20 @@ int main(int argc, const char * argv[]) {
 //        glBindTexture(GL_TEXTURE_2D, shadowMap.GetTextureID());
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, normalMap.GetID());
+        if(hasDisp){
+            glActiveTexture(GL_TEXTURE2);
+            glBindTexture(GL_TEXTURE_2D, displacementMap.GetID());
+        }
         glBindVertexArray(vao_square);
         glDrawArrays(GL_PATCHES, 0, 4);
 
         //Render the outline of Plane
         if(renderOutline){
             program_outline.Bind();
+            if(hasDisp){
+                glActiveTexture(GL_TEXTURE2);
+                glBindTexture(GL_TEXTURE_2D, displacementMap.GetID());
+            }
             glBindVertexArray(vao_square);
             glDrawArrays(GL_PATCHES, 0, 4);
         }
