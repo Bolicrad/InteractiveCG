@@ -165,6 +165,21 @@ void UpdateLight(){
 
 #pragma endregion CameraControl
 
+#pragma region TessellationControl
+
+int ModTessLevel(int delta = 0){
+    static int value = 1;
+    if(delta == 0) return value;
+    value += delta;
+    if(value < 1) value = 1;
+    if(value > 64) value = 64;
+    program.SetUniform("tessLevel", value);
+    program_outline.SetUniform("tessLevel",value);
+    return value;
+}
+
+#pragma endregion TessellationControl
+
 #pragma region Shader
 void SetUpUniforms(){
     program.SetUniformMatrix4("m",modelMatrix.cell);
@@ -173,9 +188,10 @@ void SetUpUniforms(){
 }
 
 void CompileShader(){
+
     //Create Shader Programs
-    program.BuildFiles("../shaders/shader.vert","../shaders/shader.frag");
-    program_outline.BuildFiles("../shaders/outline.vert", "../shaders/outline.frag", "../shaders/outline.geom");
+    program.BuildFiles("../shaders/shader.vert","../shaders/shader.frag", nullptr, "../shaders/shader.tesc", "../shaders/shader.tese");
+    program_outline.BuildFiles("../shaders/outline.vert", "../shaders/outline.frag", "../shaders/outline.geom", "../shaders/outline.tesc", "../shaders/outline.tese");
     //program_shadow.BuildFiles("../shaders/shadow.vert", "../shaders/shadow.frag");
     program_hint.BuildFiles("../shaders/debug.vert", "../shaders/debug.frag");
     //Set up "Constant" Uniforms
@@ -184,6 +200,7 @@ void CompileShader(){
     //Set up "Varying" Uniforms
     UpdateCam();
     UpdateLight();
+    ModTessLevel(15);
 }
 
 // Check and translate the model to the Center
@@ -318,6 +335,9 @@ void cb_MouseButton(GLFWwindow* window, int button, int action, int mods){
         std::cout << "Distance: " << distance_L << std::endl;
         std::cout << "Theta:    " << theta_L/M_PI << " * PI" << std::endl;
         std::cout << "Phi:      " << phi_L/M_PI << " * PI" << std::endl;
+        std::cout << "Current Tessellation Status:" << std::endl;
+        std::cout << "Level:    " << ModTessLevel() << std::endl;
+
     }
 }
 
@@ -337,10 +357,13 @@ void cb_Key(GLFWwindow* window, int key, int scancode, int action, int mods){
             ctrlPressed = action == GLFW_PRESS;
             break;
         case GLFW_KEY_SPACE:
-            if(action == GLFW_PRESS) {
-                renderOutline = !renderOutline;
-            }
+            if(action == GLFW_PRESS) renderOutline = !renderOutline;
             break;
+        case GLFW_KEY_LEFT:
+            if(action == GLFW_PRESS) ModTessLevel(-1);
+            break;
+        case GLFW_KEY_RIGHT:
+            if(action == GLFW_PRESS) ModTessLevel(1);
     }
 }
 
@@ -348,17 +371,17 @@ void cb_Key(GLFWwindow* window, int key, int scancode, int action, int mods){
 
 #pragma region TextureFuncs
 
-std::vector<unsigned char> LoadImage(const char* fileName, unsigned width, unsigned height){
+bool LoadImage(const char* fileName, unsigned width, unsigned height, std::vector<unsigned char> &outImage){
     std::string filePath = "../textures/";
     filePath.append(fileName);
     filePath.append(".png");
 
-    std::vector<unsigned char> image;
-    unsigned error = lodepng::decode(image,width,height,filePath);
+    unsigned error = lodepng::decode(outImage,width,height,filePath);
     if(error!=0){
         std::cout << "error " << error << ": " << lodepng_error_text(error) << std::endl;
+        return false;
     }
-    return image;
+    return true;
 }
 
 #pragma endregion TextureFuncs
@@ -407,9 +430,25 @@ int main(int argc, const char * argv[]) {
     //Load image from png
     unsigned width = 512;
     unsigned height = 512;
-    auto image_normal = LoadImage("teapot_normal", width, height);
-    auto image_disp = LoadImage("teapot_disp",width,height);
-
+    bool hasDisp;
+    std::vector<unsigned char> image_normal, image_disp;
+    if(argc < 2){
+        //No map
+        glfwTerminate();
+        std::cout << "Do not have any input argument." << std::endl;
+        exit(EXIT_FAILURE);
+    }
+    else if(argc > 2){
+        //Must have displacement map
+        hasDisp = true;
+        LoadImage(argv[1], width, height, image_normal);
+        LoadImage(argv[2], width, height,image_disp);
+    }
+    else {
+        //argc == 2, don't have a displacement map
+        hasDisp = false;
+        LoadImage(argv[1], width, height,image_normal);
+    }
 #pragma endregion LoadFlies
 
 #pragma region InitShader
@@ -427,13 +466,17 @@ int main(int argc, const char * argv[]) {
     normalMap.SetFilteringMode(GL_LINEAR, GL_LINEAR_MIPMAP_LINEAR);
     normalMap.BuildMipmaps();
 
-    cyGLTexture2D displacementMap;
-    displacementMap.Initialize();
-    displacementMap.SetImage(image_disp.data(),4, width, height);
-    displacementMap.SetFilteringMode(GL_LINEAR, GL_LINEAR_MIPMAP_LINEAR);
-    displacementMap.BuildMipmaps();
-
     program.SetUniform("normalMap",1);
+
+    cyGLTexture2D displacementMap;
+    if(hasDisp){
+        displacementMap.Initialize();
+        displacementMap.SetImage(image_disp.data(),4, width, height);
+        displacementMap.SetFilteringMode(GL_LINEAR, GL_LINEAR_MIPMAP_LINEAR);
+        displacementMap.BuildMipmaps();
+
+        program.SetUniform("dispMap",2);
+    }
 
 #pragma endregion BindTexture
 
@@ -448,17 +491,17 @@ int main(int argc, const char * argv[]) {
     float squareSize = 128.0f;
     static const GLfloat squareVertexPos[] = {
             -squareSize/2.0f, -squareSize/2.0f, 0.0f,
-            squareSize/2.0f, -squareSize/2.0f, 0.0f,
             -squareSize/2.0f, squareSize/2.0f, 0.0f,
-            squareSize/2.0f,squareSize/2.0f,  0.0f,
+            squareSize/2.0f, squareSize/2.0f, 0.0f,
+            squareSize/2.0f,-squareSize/2.0f,  0.0f,
     };
 
     //texCoord data
     static const GLfloat squareTexCoord[] = {
             0.0f,1.0f,
-            1.0f,1.0f,
             0.0f,0.0f,
             1.0f,0.0f,
+            1.0f,1.0f,
     };
 
     GLuint pos_square = program.AttribLocation("iPos");
@@ -482,6 +525,8 @@ int main(int argc, const char * argv[]) {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     glBindVertexArray(0);
+
+    glPatchParameteri(GL_PATCH_VERTICES, 4);
 
 #pragma endregion Plane
 
@@ -545,7 +590,7 @@ int main(int argc, const char * argv[]) {
     while(!glfwWindowShouldClose(pWindow)){
         glfwPollEvents();
 
-//        //Render the shadow Camera
+//        //Render the plane in shadow Camera
 //        shadowMap.Bind();
 //        glClear(GL_DEPTH_BUFFER_BIT);
 //        program_shadow.Bind();
@@ -553,7 +598,7 @@ int main(int argc, const char * argv[]) {
 //        glDrawElements(GL_TRIANGLES, indexBufferData.size(), GL_UNSIGNED_INT, nullptr);
 //        shadowMap.Unbind();
 
-        //Render the world Camera
+        //Render the plane in world Camera
         program.Bind();
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
 //        glActiveTexture(GL_TEXTURE0);
@@ -561,13 +606,13 @@ int main(int argc, const char * argv[]) {
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, normalMap.GetID());
         glBindVertexArray(vao_square);
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        glDrawArrays(GL_PATCHES, 0, 4);
 
         //Render the outline of Plane
         if(renderOutline){
             program_outline.Bind();
             glBindVertexArray(vao_square);
-            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+            glDrawArrays(GL_PATCHES, 0, 4);
         }
 
         //Render the Hint Object
