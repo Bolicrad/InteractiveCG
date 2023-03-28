@@ -1,70 +1,34 @@
-# CS 6610 Project 3 - Shading
+# CS 6610 Project 8 - Tessellation
 
 ## ScreenShot
-![Project3](assets/Project3.png)
+The following pictures shows several steps of this implementation.
+> #### Step 1 (Normal Mapping)![Proj8Step1](assets/Proj8Step1.png)
+> #### Step 2 (Geometry Shader)![Proj8Step2](assets/Proj8Step2.png)
+> #### Tessellation Shaders![TessellationShaders](assets/TessellationShaders.png)
+> #### Step 3 (Displacement Mapping)![Proj8Step3](assets/Proj8Step3.png)
+> #### Shadow Mapping![ShadowMapping](assets/ShadowMapping.png)
+
 ## What you implemented
-1. Seperate VBOs for position and normal.
-2. Optimized the ram occupation by implementing EBO.
-3. (CS 6610 Requirement) Moveable light direction.
-4. Vertex Shader processing positions and normals to view space.
-5. Fragment Shader calculate the value for Blinn Shading.
+1. Implemented normal mapping inside the fragment shader of the plane.
+2. Added a seperate program to render the outline of the triangles with geometry shader.
+3. Created a common TCS, and several TESs for each program, to have the tesselator work properly.
+4. Implemented displacement mapping by modifying the z-cord value of vertex positions before transformed by Matrices.
+5. (CS 6610 requirement) Implemented shadow mapping just as last project.
 
-## Additional functionalities beyond project requirements
-For the generating of data and Element Buffer Object, I optimized a little bit to reduce the data dupilicating, which could save 40% - 60% memory consumption compared with the simplest method.
-
-```cpp
-    std::vector<cyVec3f> positionBufferData;
-    std::vector<cyVec3f> normalBufferData;
-    std::vector<GLuint> indexBufferData;
-
-    unsigned int max = cy::Max(mesh.NV(),mesh.NVN());
-    for(int vi = 0; vi < max; vi++){
-        positionBufferData.push_back(vi < mesh.NV() ? mesh.V(vi) : mesh.V(0));
-        normalBufferData.push_back(vi < mesh.NVN() ? mesh.VN(vi) : mesh.VN(0));
-    }
-
-    for(int i = 0; i < mesh.NF(); i++){
-        for(int j = 0; j < 3; j++){
-            //Set up triangle vertex buffer data
-            unsigned int index = mesh.F(i).v[j];
-            unsigned int indexN = mesh.FN(i).v[j];
-            if(indexN == index){
-                indexBufferData.push_back(index);
-            }
-            else {
-                bool added = false;
-                for(unsigned int mi = max; mi < positionBufferData.size();mi++){
-                    if(positionBufferData.at(mi)==mesh.V(index) &&
-                    normalBufferData.at(mi)==mesh.VN(indexN)){
-                        //This Duplicated vertex is already added, do not add again
-                        added = true;
-                        indexBufferData.push_back(mi);
-                        break;
-                    }
-                }
-                if(!added){
-                    unsigned int newIndex = positionBufferData.size();
-                    positionBufferData.push_back(mesh.V(index));
-                    normalBufferData.push_back(mesh.VN(indexN));
-                    indexBufferData.push_back(newIndex);
-                }
-            }
-        }
-    }
-``` 
 ## How to use the implementation
 
 This project is now a Clion project, so we need to run it under this IDE, or others that support cmake.
 
-After download and setup the environment, then click Run in your IDE, and you will see a 16:10 window appear on your screen, contains a teapot model with Blinn Shading. 
+After download and setup the environment, then click Run in your IDE, and you will see a 16:10 window appear on your screen, contains a plane with a fake teapot integrating on it, with blinn shading and shadows. 
 
 ### List of Inputs
 
-* Hold mouse left and drag, to rotate the view of the model;
+* Hold mouse left and drag, to rotate the view of the plane;
 * Hold mouse left and drag, to rotate the light direction when ```ctrl``` is pressed; 
 * Hold mouse right and drag, to zoom in/out the camera of the model.
+* Hold mouse right and drag, to zoom in/out the light distance whrn ```ctrl``` is pressed.
+* Press ```left arrow``` or ```right arrow``` to modify the tessellation level. 
 * Press ```Esc``` to exit; 
-* Press ```F6``` to recompile the shader program.
 
 ## Envrionment, OS, External Libraries and Additional Requirements
 I developed and tested this project on Latest MacOS 13.2.1, and the architecture is Apple Silicon (Arm64). 
